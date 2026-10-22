@@ -49,6 +49,7 @@ class SecurityPolicy:
             "fs_file_metadata",
             "fs_search_files",
             "fs_make_dir",
+            "fs_write_text_file",
             "fs_copy_file",
             "fs_move_file",
             "fs_rename_file",
@@ -93,7 +94,7 @@ class SecurityPolicy:
                     norm_str = str(resolved).lower()
 
                     # Prevent modifying protected OS directories
-                    if tool in ("fs_make_dir", "fs_copy_file", "fs_move_file", "fs_rename_file", "fs_delete_file"):
+                    if tool in ("fs_make_dir", "fs_write_text_file", "fs_copy_file", "fs_move_file", "fs_rename_file", "fs_delete_file"):
                         for protected in cls.PROTECTED_SYSTEM_DIRECTORIES:
                             if norm_str == protected or norm_str.startswith(protected + os.sep):
                                 return ActionPermission(

@@ -66,6 +66,12 @@ class ActionDispatcher:
                 )
             elif tool == "fs_make_dir":
                 raw_result = FilesystemOperations.make_dir(parameters["path"])
+            elif tool == "fs_write_text_file":
+                raw_result = FilesystemOperations.write_text_file(
+                    parameters["path"],
+                    parameters["content"],
+                    overwrite=parameters.get("overwrite", False),
+                )
             elif tool == "fs_copy_file":
                 raw_result = FilesystemOperations.copy_file(parameters["src"], parameters["dst"])
             elif tool == "fs_move_file":

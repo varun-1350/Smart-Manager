@@ -62,16 +62,17 @@ def main():
     dist_index = project_root / "frontend" / "dist" / "index.html"
     window_url = "http://127.0.0.1:5173"  # Default Vite dev server
 
-    # If dist index exists and vite dev is not running, we can open dist or local dev
+    # Serve the production bundle through FastAPI. Opening index.html with file://
+    # breaks Vite's absolute /assets URLs and results in a blank WebView2 window.
     try:
         res = httpx.get("http://127.0.0.1:5173", timeout=0.5)
         if res.status_code == 200:
             window_url = "http://127.0.0.1:5173"
         elif dist_index.exists():
-            window_url = f"file:///{str(dist_index).replace(os.sep, '/')}"
+            window_url = f"http://{settings.smart_manager_host}:{settings.smart_manager_port}"
     except Exception:
         if dist_index.exists():
-            window_url = f"file:///{str(dist_index).replace(os.sep, '/')}"
+            window_url = f"http://{settings.smart_manager_host}:{settings.smart_manager_port}"
 
     print(f"Launching desktop window pointing to: {window_url}")
 

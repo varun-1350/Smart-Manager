@@ -96,6 +96,7 @@ class AgentRuntime:
                         "task_id": task_id,
                         "tool": act.tool,
                         "parameters": act.parameters,
+                        "description": act.reasoning,
                         "reason": observation.error,
                         "risk_level": observation.verification_notes or "high",
                     }
@@ -133,7 +134,7 @@ class AgentRuntime:
         ctx.pending_approval = None
 
         if not approved:
-            # User rejected the action: record rejection observation so agent can adapt or abort
+            # A denial explicitly cancels the paused task; do not let the model re-propose it.
             obs = ActionObservation(
                 tool=pending["tool"],
                 parameters=pending["parameters"],
@@ -142,7 +143,9 @@ class AgentRuntime:
                 verified=False,
             )
             ctx.record_observation(obs)
-            ctx.status = "running"
+            ctx.status = "cancelled"
+            ctx.final_result = "Action cancelled at your request."
+            return ctx
         else:
             # User approved: execute with pre-approval granted
             obs = ActionDispatcher.execute(
@@ -188,6 +191,7 @@ class AgentRuntime:
                         "task_id": ctx.task_id,
                         "tool": act.tool,
                         "parameters": act.parameters,
+                        "description": act.reasoning,
                         "reason": obs.error,
                     }
                     return ctx

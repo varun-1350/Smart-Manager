@@ -99,3 +99,16 @@ def test_action_dispatcher_requires_approval(tmp_path: Path):
     assert obs_approved.success is True
     assert obs_approved.verified is True
     assert not target.exists()
+
+
+def test_action_dispatcher_writes_new_text_file_without_shell(tmp_path: Path):
+    target = tmp_path / "Hello.txt"
+
+    obs = ActionDispatcher.execute(
+        tool="fs_write_text_file",
+        parameters={"path": str(target), "content": "Hii i am varun"},
+    )
+
+    assert obs.success is True
+    assert obs.verified is True
+    assert target.read_text(encoding="utf-8") == "Hii i am varun"

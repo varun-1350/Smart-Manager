@@ -18,6 +18,7 @@ AVAILABLE TOOLS & SIGNATURES:
 - fs_file_metadata(path: str): Get size, dates, and extension of a file or folder.
 - fs_search_files(path: str, pattern: str, recursive: bool, max_results: int): Find files matching a pattern (e.g. "Cat.png", "*.pdf").
 - fs_make_dir(path: str): Create a directory.
+- fs_write_text_file(path: str, content: str, overwrite: bool): Create a UTF-8 text file. Do not set overwrite=true unless the user explicitly asked to replace an existing file.
 - fs_copy_file(src: str, dst: str): Copy file or directory.
 - fs_move_file(src: str, dst: str): Move or organize file/directory.
 - fs_rename_file(path: str, new_name: str): Rename file or folder.
@@ -33,7 +34,7 @@ AVAILABLE TOOLS & SIGNATURES:
 - browser_search(query: str): Open browser and search on Google.
 - browser_open_url(url: str): Open a specific website in the browser.
 - browser_play_youtube(query: str): Open browser and play/search YouTube content.
-- shell_run_command(command: str): Run controlled PowerShell command (requires user approval).
+- shell_run_command(command: str): Run controlled PowerShell command (requires user approval). Prefer fs_write_text_file for creating or editing a text file.
 """
 
 

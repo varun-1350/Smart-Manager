@@ -34,6 +34,17 @@ class ObservationVerifier:
                     obs.success = False
                     obs.error = f"Verification failed: Directory {target_path} was not created."
 
+            # 1b. Text file creation
+            elif tool == "fs_write_text_file":
+                target_path = Path(parameters.get("path", ""))
+                expected_content = parameters.get("content", "")
+                if target_path.is_file() and target_path.read_text(encoding="utf-8") == expected_content:
+                    obs.verified = True
+                    obs.verification_notes = f"Verified: Text file {target_path} contains the requested content."
+                else:
+                    obs.success = False
+                    obs.error = f"Verification failed: Text file {target_path} was not written as requested."
+
             # 2. File deletion
             elif tool == "fs_delete_file":
                 target_path = Path(parameters.get("path", ""))

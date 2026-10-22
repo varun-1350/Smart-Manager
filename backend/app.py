@@ -4,6 +4,7 @@ from pathlib import Path
 import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from config import settings
@@ -118,7 +119,6 @@ async def update_config(req: ConfigUpdateRequest) -> Dict[str, Any]:
     if req.keep_alive:
         ollama_client.keep_alive = req.keep_alive
         settings.ollama_keep_alive = req.keep_alive
-
     return {"status": "updated", "config": await get_config()}
 
 
@@ -259,7 +259,15 @@ async def execute_task(req: TaskExecuteRequest):
                     verified=obs.verified,
                 )
 
-        final_response = context.final_result or context.error or "Task completed."
+        final_response = (
+            context.final_result
+            or context.error
+            or (
+                "Approval is required before I can continue."
+                if context.status == "waiting_approval"
+                else "Task completed."
+            )
+        )
 
         # Save agent response in history
         HistoryRepository.save_message(
@@ -289,8 +297,6 @@ async def execute_task(req: TaskExecuteRequest):
     except Exception as e:
         logger.exception("Error executing task")
         raise HTTPException(status_code=500, detail=str(e))
-
-
 @app.post("/api/task/approve")
 async def approve_task(req: TaskApprovalRequest):
     try:
@@ -333,6 +339,13 @@ async def ping_model(request: PingPromptRequest):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# Serve the production React bundle from the same local origin as the API.
+# This keeps its absolute /assets paths and relative /api requests working in WebView2.
+frontend_dir = settings.project_root / "frontend" / "dist"
+if frontend_dir.is_dir() and (frontend_dir / "index.html").is_file():
+    app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")
 
 
 if __name__ == "__main__":

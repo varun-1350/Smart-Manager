@@ -12,7 +12,7 @@ import Sidebar from './components/Sidebar'
 import MessageBubble from './components/MessageBubble'
 import ConfirmationModal from './components/ConfirmationModal'
 import SettingsModal from './components/SettingsModal'
-import { fetchHealth, fetchConfig, updateConfig } from './services/api'
+import { approveTask, executeTask, fetchHealth, fetchConfig, updateConfig } from './services/api'
 
 export default function App() {
   const [conversations, setConversations] = useState([
@@ -96,22 +96,11 @@ export default function App() {
 
     try {
       // Connect to backend task API
-      const res = await fetch('http://127.0.0.1:8765/api/task/execute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          task_id: `task-${Date.now()}`,
-          prompt: prompt,
-          conversation_id: activeId
-        })
+      const result = await executeTask({
+        task_id: `task-${Date.now()}`,
+        prompt,
+        conversation_id: activeId,
       })
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err.detail || `Server error: HTTP ${res.status}`)
-      }
-
-      const result = await res.json()
 
       const agentMsg = {
         id: `msg-${Date.now() + 1}`,
@@ -128,6 +117,13 @@ export default function App() {
           c.id === activeId ? { ...c, messages: [...c.messages, agentMsg] } : c
         )
       )
+      if (result.pending_approval) {
+        setPendingApproval({
+          ...result.pending_approval,
+          id: result.task_id,
+          conversation_id: activeId,
+        })
+      }
     } catch (err) {
       const errorMsg = {
         id: `msg-${Date.now() + 1}`,
@@ -163,13 +159,51 @@ export default function App() {
     }
   }
 
-  const handleApprove = (approvalId) => {
+  const handleApproval = async (approved) => {
+    if (!pendingApproval || isLoading) return
+
+    const approval = pendingApproval
+    setIsLoading(true)
     setPendingApproval(null)
+    try {
+      const result = await approveTask(approval.task_id || approval.id, approved)
+      const agentMsg = {
+        id: `msg-${Date.now()}`,
+        role: 'agent',
+        content: result.response || (approved ? 'Action processed.' : 'Action cancelled.'),
+        actions: result.actions || [],
+        status: result.status || 'completed',
+        timestamp: Date.now(),
+      }
+      setConversations((prev) => prev.map((c) =>
+        c.id === approval.conversation_id ? { ...c, messages: [...c.messages, agentMsg] } : c
+      ))
+      if (result.pending_approval) {
+        setPendingApproval({
+          ...result.pending_approval,
+          id: result.task_id,
+          conversation_id: approval.conversation_id,
+        })
+      }
+    } catch (err) {
+      setConversations((prev) => prev.map((c) =>
+        c.id === approval.conversation_id
+          ? { ...c, messages: [...c.messages, {
+              id: `msg-${Date.now()}`,
+              role: 'agent',
+              content: `Error processing approval: ${err.message}`,
+              status: 'failed',
+              timestamp: Date.now(),
+            }] }
+          : c
+      ))
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  const handleReject = (approvalId) => {
-    setPendingApproval(null)
-  }
+  const handleApprove = () => handleApproval(true)
+  const handleReject = () => handleApproval(false)
 
   return (
     <div className="app-container">

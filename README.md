@@ -65,8 +65,11 @@ Smart Manager strictly separates model decision-making from operating system int
 
 ---
 
-## Current Status: Version 0.2.0
+## Current Status: Version 0.3.0 (Packaging & Turnkey Desktop Distribution)
 
+- [x] **Turnkey Desktop Launch**: One-click startup via `Launch-SmartManager.bat` and native Edge WebView2 desktop window ([backend/desktop_launcher.py](file:///d:/my%20projects/Smart-Manager/backend/desktop_launcher.py)).
+- [x] **Windows Distribution Packaging**: Automated build script ([scripts/build_windows_dist.ps1](file:///d:/my%20projects/Smart-Manager/scripts/build_windows_dist.ps1)) producing standalone distribution in `dist/SmartManager/`.
+- [x] **Environment Setup Script**: Automated 5-step installer in [scripts/setup_environment.ps1](file:///d:/my%20projects/Smart-Manager/scripts/setup_environment.ps1).
 - [x] **Local AI Integration**: Ollama client with structured JSON Schema output validation and malformed recovery.
 - [x] **Hardware-Aware Resource Optimization (RTX 3050 6GB / 16GB RAM)**:
   - Strict single-model concurrency gate (`asyncio.Semaphore(1)`).
@@ -83,52 +86,46 @@ Smart Manager strictly separates model decision-making from operating system int
 - [x] **Security Engine**: Path traversal protection, system directory shielding, risk classification (`READ_ONLY`, `LOW`, `MODERATE`, `HIGH`, `CRITICAL`), and user approval gates.
 - [x] **Local Persistence**: SQLite database for conversations, message history, and action audit logs.
 - [x] **Conversational Interface**: ChatGPT/Gemini-style React interface with action timeline and approval modals.
-- [x] **Test Suite**: 18 unit and integration tests passing.
+- [x] **Test Suite**: 23 unit and integration tests passing.
 
 ---
 
-## Prerequisites & Installation
+## Quick Start (Turnkey Launch)
 
-### 1. Windows Runtimes
-- **Python**: 3.12+ (64-bit recommended)
-- **Node.js**: v20+ (Node v22 installed)
-- **Ollama**: Installed and running on `http://127.0.0.1:11434` with `gemma4:e2b` pulled.
-
-### 2. Ollama Model Setup
+### Option A: One-Click Desktop Launch (Recommended)
+Simply double-click:
 ```powershell
-ollama pull gemma4:e2b
+Launch-SmartManager.bat
 ```
+This automatically verifies the local Ollama daemon, starts the private backend on `127.0.0.1:8765`, and opens the native Windows desktop application window using Edge WebView2.
 
-### 3. Backend Setup
-```powershell
-# In project root
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r backend\requirements.txt
-```
-
-### 4. Frontend Setup
-```powershell
-cd frontend
-npm install
-```
-
----
-
-## Running in Development
-
-### 1. Start the Python Backend:
+### Option B: Running from Source in Development
+1. Start backend:
 ```powershell
 .\.venv\Scripts\python.exe -m uvicorn app:app --app-dir backend --host 127.0.0.1 --port 8765
 ```
-The API server will listen on `http://127.0.0.1:8765`. Health check is available at `http://127.0.0.1:8765/api/health`.
-
-### 2. Start the React Frontend:
+2. Start frontend:
 ```powershell
 cd frontend
 npm run dev
 ```
-The UI will be accessible in your browser at `http://127.0.0.1:5173`.
+Open `http://127.0.0.1:5173` in your browser.
+
+---
+
+## Building Standalone Windows Distribution
+
+To build a standalone, portable Windows application package:
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\build_windows_dist.ps1
+```
+The output distribution will be assembled at `dist\SmartManager\SmartManager.exe`.
+
+### Tauri Native Installer (Optional)
+If Rust is installed (`https://rustup.rs`), you can compile a native MSI installer via Tauri 2:
+```powershell
+npx @tauri-apps/cli build
+```
 
 ---
 

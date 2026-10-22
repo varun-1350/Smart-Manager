@@ -2,7 +2,22 @@
 
 All notable changes to the Smart Manager project will be documented in this file.
 
-## [0.2.1] - Hardware-Aware Development & Resource Optimization Add-on (Current)
+## [0.3.0] - Phase 11: Windows Packaging, Native Desktop Launcher & Turnkey Distribution (Current)
+
+### Added
+- **Native Windows Desktop Window Launcher** ([backend/desktop_launcher.py](file:///d:/my%20projects/Smart-Manager/backend/desktop_launcher.py)):
+  - Launches a native desktop window utilizing Microsoft Edge WebView2 (`155.0.4283.62`).
+  - Automatically manages background FastAPI backend startup, health polling, and clean shutdown on window close.
+- **Turnkey One-Click Launch Script** ([Launch-SmartManager.bat](file:///d:/my%20projects/Smart-Manager/Launch-SmartManager.bat)):
+  - Starts the desktop application with a single click, checking Ollama status and launching the environment automatically.
+- **Automated Windows Distribution Builder** ([scripts/build_windows_dist.ps1](file:///d:/my%20projects/Smart-Manager/scripts/build_windows_dist.ps1)):
+  - Bundles the frontend production bundle and Python backend via PyInstaller into a standalone portable folder in `dist/SmartManager/`.
+- **Environment Verification & Setup Script** ([scripts/setup_environment.ps1](file:///d:/my%20projects/Smart-Manager/scripts/setup_environment.ps1)):
+  - Reproducible 5-step installer verifying Python, Node, Ollama model availability, virtualenv, and frontend production builds.
+- **Tauri Shell Configuration**:
+  - Full configuration maintained in [src-tauri/tauri.conf.json](file:///d:/my%20projects/Smart-Manager/src-tauri/tauri.conf.json) and [src-tauri/Cargo.toml](file:///d:/my%20projects/Smart-Manager/src-tauri/Cargo.toml) for building Windows `.msi` installers when `rustup` is configured.
+- **Unit Tests**:
+  - Added [backend/tests/test_launcher.py](file:///d:/my%20projects/Smart-Manager/backend/tests/test_launcher.py) (23 passing tests total).
 
 ### Added
 - **Hardware Diagnostic & Benchmark Suite** ([backend/benchmark_hardware.py](file:///d:/my%20projects/Smart-Manager/backend/benchmark_hardware.py)):

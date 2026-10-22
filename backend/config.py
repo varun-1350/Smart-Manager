@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     smart_manager_port: int = Field(default=8765, description="Port for backend API")
 
     ollama_base_url: str = Field(default="http://127.0.0.1:11434", description="Base URL of local Ollama instance")
-    ollama_model: str = Field(default="gemma2:2b", description="Active local Ollama model")
+    ollama_model: str = Field(default="gemma4:e2b", description="Active local Ollama model")
     ollama_request_timeout_seconds: float = Field(default=60.0, description="Timeout for model inference requests")
 
     agent_max_iterations: int = Field(default=15, description="Maximum loop iterations per task")

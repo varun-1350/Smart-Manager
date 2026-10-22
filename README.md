@@ -1,12 +1,12 @@
 # Smart Manager — Autonomous Local AI Agent for Windows
 
-Smart Manager is a privacy-first, desktop-native AI assistant for Windows. Powered by a local language model running through Ollama, Smart Manager translates high-level natural language instructions into dynamic multi-step plans and executes them through controlled operating system interfaces.
+Smart Manager is a privacy-first, desktop-native AI assistant for Windows. Powered by a local language model running through Ollama (defaulting to `gemma4:e2b`), Smart Manager translates high-level natural language instructions into dynamic multi-step plans and executes them through controlled operating system interfaces.
 
 ---
 
 ## Architecture Overview
 
-Smart Manager follows a strict separation of concerns between model decision-making and operating system interaction:
+Smart Manager strictly separates model decision-making from operating system interaction:
 
 ```
 +-----------------------------------------------------------+
@@ -16,7 +16,7 @@ Smart Manager follows a strict separation of concerns between model decision-mak
 |  |  (Conversational UI, Action Timeline, Confirmations)|  |
 |  +---------------------------+-------------------------+  |
 +------------------------------|----------------------------+
-                               | REST / WebSocket API
+                               | REST API (Loopback only)
                                v
 +-----------------------------------------------------------+
 |               Smart Manager Python 3.12 Backend           |
@@ -30,7 +30,7 @@ Smart Manager follows a strict separation of concerns between model decision-mak
 |            v                              v               |
 |  +-------------------+       +-------------------------+  |
 |  |  Security Policy  |       | Windows Action Runtime  |  |
-|  |  & Approvals      |       | - Filesystem            |  |
+|  |  & Approvals      |       | - Filesystem Operations |  |
 |  +-------------------+       | - Processes & Storage   |  |
 |                              | - Applications & Web    |  |
 |  +-------------------+       +-------------------------+  |
@@ -42,38 +42,42 @@ Smart Manager follows a strict separation of concerns between model decision-mak
                                v
                  +---------------------------+
                  |    Local Ollama Daemon    |
-                 |   (e.g., gemma2:2b)       |
+                 |      (gemma4:e2b)         |
                  +---------------------------+
 ```
 
-1. **No Cloud LLMs**: All planning and reasoning happens on your local machine using Ollama. No personal data, file content, or telemetry is sent to third-party AI services.
+1. **100% Local Inference**: All planning and reasoning happens on your local machine using Ollama. No personal data, file content, or telemetry is sent to third-party cloud AI services.
 2. **Observe-Plan-Act-Verify Loop**: The agent inspects context, formulates actions, enforces safety gates, interacts with Windows APIs, and verifies outcomes before reporting completion.
 3. **Structured Outputs**: Model suggestions are parsed and validated through strict Pydantic schemas before any action dispatcher executes them.
-4. **Approval & Risk Gates**: Destructive operations (such as file deletion, process termination, bulk movement) trigger explicit confirmation prompts in the UI.
+4. **Approval & Risk Gates**: Destructive operations (such as file deletion, process termination, shell command execution) trigger explicit confirmation prompts in the UI.
 
 ---
 
 ## Technology Stack
 
 - **Desktop Shell**: Tauri 2 with Rust (Windows desktop wrapper)
-- **Frontend**: React 19, Vite, Vanilla CSS
+- **Frontend**: React 18, Vite, Lucide Icons, Custom CSS
 - **Backend**: Python 3.12, FastAPI, Uvicorn, WebSockets
-- **Agent Intelligence**: Local Ollama (`gemma2:2b`, configurable)
+- **Agent Intelligence**: Local Ollama (`gemma4:e2b`, configurable)
 - **Validation**: Pydantic v2
-- **Persistence**: SQLite (Local history, action audit trails)
+- **Persistence**: SQLite (Local history, action audit trails in `data/smart_manager.db`)
 - **Testing**: Pytest, Pytest-asyncio
 
 ---
 
-## Current Status: Phase 1 (Foundation)
+## Current Status: Version 0.2.0
 
-- [x] Project architecture established and repository initialized.
-- [x] Python virtual environment configured with core backend packages.
-- [x] React/Vite frontend scaffolded.
-- [x] Tauri 2 configuration and Rust shell scaffolded.
-- [x] Environment configuration (`.env.example`, `.env`) with loopback-only defaults.
-- [x] Initial FastAPI health and model ping endpoints implemented.
-- [x] Ollama daemon verification and model provisioning in progress.
+- [x] **Local AI Integration**: Ollama client with structured JSON Schema output validation and malformed recovery.
+- [x] **Autonomous Agent Loop**: Iterative observe-plan-act-verify loop with bounded execution.
+- [x] **Windows Interaction Layer**:
+  - Filesystem: search, list, metadata, directory creation, copy, move, rename, delete, open.
+  - System: drive storage inspection, process enumeration, process launch, process termination.
+  - Browser: Google search, URL navigation, YouTube queries.
+  - Shell: Controlled PowerShell commands.
+- [x] **Security Engine**: Path traversal protection, system directory shielding, risk classification (`READ_ONLY`, `LOW`, `MODERATE`, `HIGH`, `CRITICAL`), and user approval gates.
+- [x] **Local Persistence**: SQLite database for conversations, message history, and action audit logs.
+- [x] **Conversational Interface**: ChatGPT/Gemini-style React interface with action timeline and approval modals.
+- [x] **Test Suite**: 18 unit and integration tests passing.
 
 ---
 
@@ -82,16 +86,12 @@ Smart Manager follows a strict separation of concerns between model decision-mak
 ### 1. Windows Runtimes
 - **Python**: 3.12+ (64-bit recommended)
 - **Node.js**: v20+ (Node v22 installed)
-- **Ollama**: Installed and running on `http://127.0.0.1:11434`
-- **Rust / Cargo**: Optional during development, required for Tauri binary packaging.
+- **Ollama**: Installed and running on `http://127.0.0.1:11434` with `gemma4:e2b` pulled.
 
 ### 2. Ollama Model Setup
-Ensure Ollama is running, then pull the recommended model:
 ```powershell
-ollama pull gemma2:2b
+ollama pull gemma4:e2b
 ```
-
-You can customize the model by setting `OLLAMA_MODEL` in `.env`.
 
 ### 3. Backend Setup
 ```powershell
@@ -111,39 +111,38 @@ npm install
 
 ## Running in Development
 
-### Start the Python Backend:
+### 1. Start the Python Backend:
 ```powershell
-.\.venv\Scripts\python.exe backend\app.py
+.\.venv\Scripts\python.exe -m uvicorn app:app --app-dir backend --host 127.0.0.1 --port 8765
 ```
 The API server will listen on `http://127.0.0.1:8765`. Health check is available at `http://127.0.0.1:8765/api/health`.
 
-### Start the React Frontend:
+### 2. Start the React Frontend:
 ```powershell
 cd frontend
 npm run dev
 ```
-The UI will be accessible at `http://127.0.0.1:5173`.
+The UI will be accessible in your browser at `http://127.0.0.1:5173`.
 
 ---
 
 ## Running Tests
 
-Run the test suite using pytest:
+Run the full backend test suite:
 ```powershell
-.\.venv\Scripts\pytest.exe backend\tests -v
+.\.venv\Scripts\pytest.exe -v
+```
+
+Build the frontend production bundle:
+```powershell
+cd frontend
+npm run build
 ```
 
 ---
 
-## Configuration & Security Notes
+## Security Notes
 
 - **Loopback Binding**: The backend server is strictly bound to `127.0.0.1` (`SMART_MANAGER_HOST`) to prevent unauthorized local network exposure.
-- **Safety Enforcement**: High-risk actions require user approval before execution.
+- **Safety Enforcement**: High-risk actions (`fs_delete_file`, `proc_kill`, `shell_run_command`) require user approval before execution.
 - **Data Privacy**: Conversation history and logs are stored locally in `data/smart_manager.db`. No telemetry or personal file data is ever transmitted externally.
-
----
-
-## Known Limitations
-
-- Packaging as a standalone `.exe` installer via Tauri requires Rust and cargo to be configured in PATH.
-- Local model performance and planning accuracy depend on available CPU/GPU resources and model size.

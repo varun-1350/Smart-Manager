@@ -107,6 +107,7 @@ export default function SettingsModal({
 
   // System & Hardware States
   const [numCtx, setNumCtx] = useState(config?.num_ctx || 2048)
+  const [numPredict, setNumPredict] = useState(config?.num_predict || 256)
   const [keepAlive, setKeepAlive] = useState(config?.keep_alive || '5m')
   const [maxIterations, setMaxIterations] = useState(config?.max_iterations || 15)
   const [confirmationRequired, setConfirmationRequired] = useState(
@@ -255,6 +256,7 @@ export default function SettingsModal({
     onSaveConfig({
       ollama_model: selectedModelId,
       num_ctx: parseInt(numCtx, 10),
+      num_predict: parseInt(numPredict, 10),
       keep_alive: keepAlive,
       max_iterations: parseInt(maxIterations, 10),
       confirmation_required: confirmationRequired,
@@ -630,13 +632,29 @@ export default function SettingsModal({
               </div>
 
               <div className="setting-group">
+                <label className="setting-label">Planning Response Limit</label>
+                <select
+                  className="input-field"
+                  value={numPredict}
+                  onChange={(e) => setNumPredict(e.target.value)}
+                >
+                  <option value={128}>128 tokens (Fastest)</option>
+                  <option value={256}>256 tokens (Recommended)</option>
+                  <option value={512}>512 tokens (More room for complex tasks)</option>
+                </select>
+                <span className="setting-help">
+                  Limits each planning response. 256 is enough for normal file, app, and browser tasks.
+                </span>
+              </div>
+
+              <div className="setting-group">
                 <label className="setting-label">Model Idle Keep-Alive</label>
                 <select
                   className="input-field"
                   value={keepAlive}
                   onChange={(e) => setKeepAlive(e.target.value)}
                 >
-                  <option value="0m">0 minutes (Unload immediately after task)</option>
+                  <option value="0s">Unload immediately between requests (slow for multi-step tasks)</option>
                   <option value="2m">2 minutes (Recommended for low RAM)</option>
                   <option value="5m">5 minutes (Balanced)</option>
                   <option value="15m">15 minutes</option>

@@ -78,7 +78,10 @@ Remember: return ONLY valid JSON."""
             prompt=user_prompt,
             response_model=AgentStepDecision,
             system=SYSTEM_PROMPT,
-            retries=2,
+            # Grammar-constrained JSON normally succeeds on the first pass.
+            # One retry preserves recovery while avoiding repeated 60-second
+            # waits on a malformed local-model response.
+            retries=1,
         )
 
         return decision

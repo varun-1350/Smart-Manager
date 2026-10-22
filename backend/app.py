@@ -75,6 +75,7 @@ class ConfigUpdateRequest(BaseModel):
     max_iterations: Optional[int] = None
     confirmation_required: Optional[bool] = None
     num_ctx: Optional[int] = None
+    num_predict: Optional[int] = None
     keep_alive: Optional[str] = None
     auto_unload: Optional[bool] = None
 
@@ -134,6 +135,9 @@ async def update_config(req: ConfigUpdateRequest) -> Dict[str, Any]:
     if req.num_ctx:
         ollama_client.num_ctx = req.num_ctx
         settings.ollama_num_ctx = req.num_ctx
+    if req.num_predict:
+        ollama_client.num_predict = req.num_predict
+        settings.ollama_num_predict = req.num_predict
     if req.keep_alive:
         ollama_client.keep_alive = req.keep_alive
         settings.ollama_keep_alive = req.keep_alive

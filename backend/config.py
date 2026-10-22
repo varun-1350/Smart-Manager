@@ -17,9 +17,13 @@ class Settings(BaseSettings):
     ollama_model: str = Field(default="gemma4:e2b", description="Active local Ollama model")
     ollama_request_timeout_seconds: float = Field(default=60.0, description="Timeout for model inference requests")
     ollama_num_ctx: int = Field(default=4096, description="Context window size in tokens")
-    ollama_num_predict: int = Field(default=1024, description="Maximum tokens to generate per step")
+    # Planning decisions are small JSON objects. Limiting their output avoids
+    # spending most of a task generating unused tokens.
+    ollama_num_predict: int = Field(default=256, description="Maximum tokens to generate per planning step")
     ollama_num_batch: int = Field(default=128, description="Batch size for prompt evaluation (128 conserves memory)")
-    ollama_keep_alive: str = Field(default="0s", description="Idle unload duration (e.g. '0s' for instant RAM release)")
+    # Never use 0s here: Ollama would unload after each planning step and need
+    # to reload the model again for the next step of the same task.
+    ollama_keep_alive: str = Field(default="5m", description="Idle unload duration between model requests")
     ollama_auto_unload: bool = Field(default=True, description="Automatically unload model after task execution to minimize RAM")
     ollama_think: bool = Field(default=False, description="Whether to include thinking tokens in model responses")
 

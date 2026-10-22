@@ -34,9 +34,9 @@ import {
 const PROVIDER_PRESETS = {
   gemini: {
     label: 'Google Gemini',
-    defaultBaseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
-    defaultModel: 'gemini-1.5-flash',
-    models: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-exp'],
+    defaultBaseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+    defaultModel: 'gemini-3.5-flash',
+    models: ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-flash-lite-latest'],
     badgeClass: 'badge-gemini',
     keyPlaceholder: 'AQ.... or AIzaSy...',
     docUrl: 'https://aistudio.google.com/apikey',

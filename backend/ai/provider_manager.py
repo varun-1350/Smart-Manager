@@ -22,8 +22,8 @@ SAFE_MODEL_NAME_REGEX = re.compile(r"^[a-zA-Z0-9_\-\.\/]+(:[a-zA-Z0-9_\-\.]+)?$"
 PROVIDER_PRESETS: Dict[str, Dict[str, Any]] = {
     "gemini": {
         "label": "Google Gemini",
-        "default_base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
-        "suggested_models": ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"],
+        "default_base_url": "https://generativelanguage.googleapis.com/v1beta",
+        "suggested_models": ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-flash-lite-latest"],
     },
     "groq": {
         "label": "Groq",

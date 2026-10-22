@@ -1,15 +1,110 @@
 import os
 import shutil
 import glob
+import re
+import difflib
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, List, Optional
+
+try:
+    import winreg
+except ImportError:
+    winreg = None
+
+
+def get_special_folder(folder_name: str) -> Path:
+    """Retrieve Windows special folder locations, accounting for OneDrive redirection."""
+    reg_names = {
+        "desktop": "Desktop",
+        "documents": "Personal",
+        "pictures": "My Pictures",
+        "downloads": "{374DE290-123F-4565-9164-39C4925E467B}",
+    }
+    if winreg:
+        try:
+            k = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders",
+            )
+            reg_key = reg_names.get(folder_name.lower(), folder_name)
+            val, _ = winreg.QueryValueEx(k, reg_key)
+            expanded = os.path.expandvars(str(val))
+            if os.path.exists(expanded):
+                return Path(expanded).resolve()
+        except Exception:
+            pass
+
+    home = Path.home()
+    folder_cap = folder_name.capitalize()
+    for cand in [home / "OneDrive" / folder_cap, home / folder_cap, Path("C:/Users/Public") / folder_cap]:
+        if cand.exists():
+            return cand.resolve()
+
+    return (home / folder_cap).resolve()
+
+
+def resolve_system_path(path_str: Optional[str]) -> Path:
+    """
+    Smart Windows path resolver. Seamlessly handles Windows folder redirection (OneDrive Desktop),
+    shorthand folder names ('Desktop', 'Documents', 'Downloads'), tilde expansion, and environment variables.
+    """
+    if not path_str or not str(path_str).strip():
+        return get_special_folder("desktop")
+
+    clean = str(path_str).strip(' "\'')
+    clean_lower = clean.lower().replace("/", "\\")
+
+    # 1. Shorthand user folder names
+    if clean_lower in ("desktop", "~/desktop", "%desktop%", "$desktop"):
+        return get_special_folder("desktop")
+    if clean_lower in ("documents", "~/documents", "my documents", "%documents%"):
+        return get_special_folder("documents")
+    if clean_lower in ("downloads", "~/downloads", "%downloads%"):
+        return get_special_folder("downloads")
+    if clean_lower in ("pictures", "~/pictures", "my pictures", "%pictures%"):
+        return get_special_folder("pictures")
+
+    desktop_dir = get_special_folder("desktop")
+
+    # 2. Check prefix like Desktop\ or desktop/
+    if clean_lower.startswith("desktop\\"):
+        sub = clean[8:].lstrip("\\/")
+        return (desktop_dir / sub).resolve()
+
+    # 3. Check C:\Desktop or C:/Desktop
+    if clean_lower.startswith("c:\\desktop"):
+        sub = clean[10:].lstrip("\\/")
+        return (desktop_dir / sub).resolve() if sub else desktop_dir
+
+    # 4. Check C:\Users\<user>\Desktop when redirection has moved it
+    home_lower = str(Path.home()).lower().replace("/", "\\")
+    user_desktop_prefix = f"{home_lower}\\desktop"
+    if clean_lower == user_desktop_prefix:
+        return desktop_dir
+    if clean_lower.startswith(user_desktop_prefix + "\\"):
+        sub = clean[len(user_desktop_prefix) + 1 :].lstrip("\\/")
+        return (desktop_dir / sub).resolve()
+
+    # 5. General path expansion
+    expanded = os.path.expandvars(os.path.expanduser(clean))
+    p = Path(expanded).resolve()
+
+    # 6. If resolved path doesn't exist, but contains a \Desktop\ element
+    if not p.exists():
+        parts = list(p.parts)
+        for i, part in enumerate(parts):
+            if part.lower() == "desktop":
+                sub_parts = parts[i + 1 :]
+                return desktop_dir.joinpath(*sub_parts).resolve()
+
+    return p
 
 
 class FilesystemOperations:
     @staticmethod
     def list_dir(path: str) -> Dict[str, Any]:
-        p = Path(path).resolve()
+        p = resolve_system_path(path)
         if not p.exists():
             raise FileNotFoundError(f"Directory not found: {path}")
         if not p.is_dir():
@@ -39,7 +134,7 @@ class FilesystemOperations:
 
     @staticmethod
     def file_metadata(path: str) -> Dict[str, Any]:
-        p = Path(path).resolve()
+        p = resolve_system_path(path)
         if not p.exists():
             raise FileNotFoundError(f"File or directory not found: {path}")
 
@@ -62,7 +157,7 @@ class FilesystemOperations:
         recursive: bool = True,
         max_results: int = 50,
     ) -> Dict[str, Any]:
-        p = Path(path).resolve()
+        p = resolve_system_path(path)
         if not p.exists():
             raise FileNotFoundError(f"Search root path not found: {path}")
 
@@ -98,6 +193,49 @@ class FilesystemOperations:
                         if len(matches) >= max_results:
                             break
 
+        # If exact search returned no matches and pattern is specific, perform typo-tolerant fuzzy matching
+        if not matches and pattern.strip("*"):
+            clean_pat = re.sub(r"[^a-zA-Z0-9]", " ", pattern).lower()
+            pat_words = [w for w in clean_pat.split() if len(w) > 2 and w not in ("pdf", "png", "jpg", "txt", "docx")]
+            if pat_words:
+                target_ext = Path(pattern).suffix.lower() if Path(pattern).suffix else None
+                candidate_items = p.rglob("*") if recursive else p.iterdir()
+                try:
+                    for item in candidate_items:
+                        if len(matches) >= max_results:
+                            break
+                        if target_ext and item.suffix.lower() != target_ext:
+                            continue
+                        clean_fn = re.sub(r"[^a-zA-Z0-9]", " ", item.name).lower()
+                        fn_words = [w for w in clean_fn.split() if len(w) > 2]
+                        word_match = True
+                        for pw in pat_words:
+                            close = difflib.get_close_matches(pw, fn_words, cutoff=0.7)
+                            if not close and not any(pw[:4] in fw for fw in fn_words if len(fw) >= 4):
+                                word_match = False
+                                break
+                        if word_match:
+                            try:
+                                stat = item.stat()
+                                matches.append({
+                                    "name": item.name,
+                                    "path": str(item.resolve()),
+                                    "is_dir": item.is_dir(),
+                                    "size_bytes": stat.st_size if not item.is_dir() else None,
+                                    "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                                })
+                            except (PermissionError, FileNotFoundError):
+                                continue
+                except Exception:
+                    pass
+
+                # Sort fuzzy matches by similarity to search pattern
+                clean_target = pattern.replace("*", "").lower()
+                matches.sort(
+                    key=lambda m: difflib.SequenceMatcher(None, clean_target, m["name"].lower()).ratio(),
+                    reverse=True,
+                )
+
         return {
             "search_root": str(p),
             "pattern": pattern,
@@ -107,14 +245,14 @@ class FilesystemOperations:
 
     @staticmethod
     def make_dir(path: str) -> Dict[str, Any]:
-        p = Path(path).resolve()
+        p = resolve_system_path(path)
         p.mkdir(parents=True, exist_ok=True)
         return {"created": True, "path": str(p)}
 
     @staticmethod
     def write_text_file(path: str, content: str, overwrite: bool = False) -> Dict[str, Any]:
         """Create a UTF-8 text file without silently replacing an existing file."""
-        p = Path(path).resolve()
+        p = resolve_system_path(path)
         existed_before_write = p.exists()
         if existed_before_write and not overwrite:
             raise FileExistsError(f"File already exists and overwrite was not approved: {path}")
@@ -132,8 +270,8 @@ class FilesystemOperations:
 
     @staticmethod
     def copy_file(src: str, dst: str) -> Dict[str, Any]:
-        source = Path(src).resolve()
-        destination = Path(dst).resolve()
+        source = resolve_system_path(src)
+        destination = resolve_system_path(dst)
         if not source.exists():
             raise FileNotFoundError(f"Source does not exist: {src}")
 
@@ -148,8 +286,8 @@ class FilesystemOperations:
 
     @staticmethod
     def move_file(src: str, dst: str) -> Dict[str, Any]:
-        source = Path(src).resolve()
-        destination = Path(dst).resolve()
+        source = resolve_system_path(src)
+        destination = resolve_system_path(dst)
         if not source.exists():
             raise FileNotFoundError(f"Source does not exist: {src}")
 
@@ -158,7 +296,7 @@ class FilesystemOperations:
 
     @staticmethod
     def rename_file(path: str, new_name: str) -> Dict[str, Any]:
-        p = Path(path).resolve()
+        p = resolve_system_path(path)
         if not p.exists():
             raise FileNotFoundError(f"Path does not exist: {path}")
 
@@ -168,7 +306,7 @@ class FilesystemOperations:
 
     @staticmethod
     def delete_file(path: str) -> Dict[str, Any]:
-        p = Path(path).resolve()
+        p = resolve_system_path(path)
         if not p.exists():
             return {"deleted": True, "path": str(p), "existed": False}
 
@@ -181,7 +319,7 @@ class FilesystemOperations:
 
     @staticmethod
     def open_file(path: str) -> Dict[str, Any]:
-        p = Path(path).resolve()
+        p = resolve_system_path(path)
         if not p.exists():
             raise FileNotFoundError(f"Cannot open non-existent path: {path}")
 
@@ -191,7 +329,7 @@ class FilesystemOperations:
 
     @staticmethod
     def read_text_file(path: str, max_chars: int = 5000) -> Dict[str, Any]:
-        p = Path(path).resolve()
+        p = resolve_system_path(path)
         if not p.exists():
             raise FileNotFoundError(f"File not found: {path}")
         if p.is_dir():
@@ -207,9 +345,21 @@ class FilesystemOperations:
         }
 
     @staticmethod
-    def list_downloads(limit: int = 10) -> Dict[str, Any]:
-        user_home = Path.home()
-        downloads_dir = user_home / "Downloads"
+    def list_downloads(
+        limit: int = 10,
+        drive: Optional[str] = None,
+        path: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        if path:
+            downloads_dir = resolve_system_path(path)
+        elif drive:
+            drive_clean = drive.rstrip(":\\/ ").upper() + ":\\"
+            downloads_dir = resolve_system_path(f"{drive_clean}Downloads")
+            if not downloads_dir.exists():
+                downloads_dir = resolve_system_path(drive_clean)
+        else:
+            downloads_dir = get_special_folder("downloads")
+
         if not downloads_dir.exists():
             return {"downloads_path": str(downloads_dir), "count": 0, "entries": []}
 

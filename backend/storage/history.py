@@ -97,3 +97,24 @@ class HistoryRepository:
                 1 if verified else 0,
             ))
             conn.commit()
+
+    @staticmethod
+    def delete_conversation(conversation_id: str) -> bool:
+        path = get_db_path()
+        with sqlite3.connect(path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM messages WHERE conversation_id = ?", (conversation_id,))
+            cursor.execute("DELETE FROM action_logs WHERE conversation_id = ?", (conversation_id,))
+            cursor.execute("DELETE FROM conversations WHERE id = ?", (conversation_id,))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    @staticmethod
+    def clear_all_conversations() -> None:
+        path = get_db_path()
+        with sqlite3.connect(path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM messages")
+            cursor.execute("DELETE FROM action_logs")
+            cursor.execute("DELETE FROM conversations")
+            conn.commit()

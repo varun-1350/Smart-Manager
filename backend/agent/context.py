@@ -37,6 +37,7 @@ class TaskContext(BaseModel):
     pending_approval: Optional[Dict[str, Any]] = None
     final_result: Optional[str] = None
     error: Optional[str] = None
+    provider: Optional[str] = None
 
     def add_step(self, thought_summary: str, proposed_actions: List[ProposedAction]) -> StepRecord:
         self.iteration += 1
@@ -55,8 +56,39 @@ class TaskContext(BaseModel):
     def is_bounded(self) -> bool:
         return self.iteration >= self.max_iterations
 
+    @staticmethod
+    def _format_observation_result(tool: str, result: Any) -> str:
+        if not isinstance(result, dict):
+            res_str = str(result)
+            return res_str[:400] + "..." if len(res_str) > 400 else res_str
+
+        # Smart summarization for filesystem listings
+        if tool in ("fs_list_downloads", "fs_list_dir"):
+            entries = result.get("entries", [])
+            path = result.get("downloads_path") or result.get("path") or ""
+            names = [e.get("name", "") for e in entries if isinstance(e, dict)][:15]
+            names_summary = ", ".join(names)
+            return f"Found {len(entries)} items in '{path}': [{names_summary}]"
+
+        if tool == "fs_search_files":
+            results = result.get("results", [])
+            total = result.get("total_found", len(results))
+            pattern = result.get("pattern", "")
+            paths = [r.get("path", "") for r in results if isinstance(r, dict)][:10]
+            paths_summary = ", ".join(paths)
+            return f"Found {total} files matching '{pattern}': [{paths_summary}]"
+
+        if tool == "fs_open_file":
+            return f"Opened file: {result.get('path', 'success')}"
+
+        if tool == "proc_launch":
+            return f"Launched: {result.get('target', '')} (PID: {result.get('pid', 'N/A')})"
+
+        res_str = str(result)
+        return res_str[:400] + "..." if len(res_str) > 400 else res_str
+
     def format_recent_history_for_prompt(self, max_steps: int = 4) -> str:
-        """Formats the last N steps and observations for the agent's prompt."""
+        """Formats the last N steps and observations concisely for the agent's prompt."""
         recent_steps = self.history[-max_steps:]
         if not recent_steps:
             return "No previous actions taken in this task yet."
@@ -70,10 +102,7 @@ class TaskContext(BaseModel):
                     status = "SUCCESS" if obs.success else "FAILED"
                     lines.append(f"Action: {obs.tool}({obs.parameters}) -> {status}")
                     if obs.result is not None:
-                        res_str = str(obs.result)
-                        if len(res_str) > 500:
-                            res_str = res_str[:500] + "... [truncated]"
-                        lines.append(f"Observation: {res_str}")
+                        lines.append(f"Observation: {self._format_observation_result(obs.tool, obs.result)}")
                     if obs.error:
                         lines.append(f"Error: {obs.error}")
             else:

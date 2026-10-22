@@ -1,18 +1,42 @@
 import json
 import re
 import asyncio
-from typing import Dict, Any, List, Optional, Type, TypeVar
+from typing import Dict, Any, List, Optional, Type, TypeVar, Literal
 import httpx
 import psutil
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from config import settings
 
 T = TypeVar("T", bound=BaseModel)
 
+ToolName = Literal[
+    "fs_list_dir",
+    "fs_file_metadata",
+    "fs_search_files",
+    "fs_make_dir",
+    "fs_write_text_file",
+    "fs_copy_file",
+    "fs_move_file",
+    "fs_rename_file",
+    "fs_delete_file",
+    "fs_open_file",
+    "fs_read_text_file",
+    "fs_list_downloads",
+    "proc_list",
+    "proc_info",
+    "proc_launch",
+    "proc_kill",
+    "sys_storage_info",
+    "browser_search",
+    "browser_open_url",
+    "browser_play_youtube",
+    "shell_run_command",
+]
+
 
 class ProposedAction(BaseModel):
-    tool: str = Field(description="Name of the approved operating system tool to execute")
+    tool: ToolName = Field(description="Name of the approved operating system tool to execute")
     parameters: Dict[str, Any] = Field(default_factory=dict, description="Validated parameters for the action")
     reasoning: str = Field(default="", description="Why this action is being taken at this step")
 
@@ -23,6 +47,12 @@ class AgentStepDecision(BaseModel):
     is_complete: bool = Field(default=False, description="Whether the user goal has been completely achieved and verified")
     final_answer: Optional[str] = Field(default=None, description="Final user-facing response if task is complete")
     clarification_question: Optional[str] = Field(default=None, description="Question for the user if request is ambiguous")
+
+    @model_validator(mode="after")
+    def infer_is_complete(self) -> "AgentStepDecision":
+        if self.final_answer and not self.actions:
+            self.is_complete = True
+        return self
 
 
 class OllamaClient:
@@ -96,6 +126,8 @@ class OllamaClient:
         prompt: str,
         system: Optional[str] = None,
         num_ctx: Optional[int] = None,
+        format: Optional[Any] = None,
+        think: Optional[bool] = None,
     ) -> str:
         ctx_size = num_ctx or self.num_ctx
 
@@ -111,6 +143,13 @@ class OllamaClient:
                 "temperature": 0.2,
             },
         }
+        if format is not None:
+            payload["format"] = format
+
+        # Handle chain-of-thought thinking suppression to prevent token starvation
+        think_flag = think if think is not None else getattr(settings, "ollama_think", False)
+        payload["think"] = think_flag
+
         if system:
             payload["system"] = system
 
@@ -132,21 +171,43 @@ class OllamaClient:
     ) -> T:
         """
         Requests model generation and strictly validates the output against a Pydantic schema.
-        Handles JSON extraction, cleaning, and retry on malformed outputs.
+        Uses Ollama's grammar-constrained generation (format=schema) with think=False to prevent
+        thinking tokens from consuming the token budget before JSON generation.
         """
-        schema_json = json.dumps(response_model.model_json_schema(), indent=2)
+        schema_dict = response_model.model_json_schema()
+        schema_json = json.dumps(schema_dict, indent=2)
         system_instruction = (
             (system or "")
             + f"\n\nYou MUST respond ONLY with a valid JSON object matching this JSON Schema:\n{schema_json}\n"
             "Do NOT include markdown formatting or explanations outside the JSON."
         )
 
+        use_schema_format = True
+
         for attempt in range(retries + 1):
-            raw_output = await self.generate(
-                prompt=prompt,
-                system=system_instruction,
-                num_ctx=num_ctx,
-            )
+            format_payload = schema_dict if use_schema_format else "json"
+            try:
+                raw_output = await self.generate(
+                    prompt=prompt,
+                    system=system_instruction,
+                    num_ctx=num_ctx,
+                    format=format_payload,
+                    think=False,
+                )
+            except Exception as exc:
+                # Fallback to format="json" if Ollama rejects grammar schema
+                if use_schema_format and "format" in str(exc).lower():
+                    use_schema_format = False
+                    raw_output = await self.generate(
+                        prompt=prompt,
+                        system=system_instruction,
+                        num_ctx=num_ctx,
+                        format="json",
+                        think=False,
+                    )
+                else:
+                    raise
+
             cleaned_json = self._extract_json(raw_output)
 
             if cleaned_json:

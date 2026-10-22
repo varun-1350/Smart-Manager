@@ -54,18 +54,28 @@ class ActionDispatcher:
         try:
             # Filesystem Operations
             if tool == "fs_list_dir":
-                raw_result = FilesystemOperations.list_dir(parameters.get("path", "."))
+                target_path = parameters.get("path") or parameters.get("dir") or parameters.get("directory") or "."
+                raw_result = FilesystemOperations.list_dir(target_path)
             elif tool == "fs_file_metadata":
-                raw_result = FilesystemOperations.file_metadata(parameters["path"])
+                target_path = parameters.get("path") or parameters.get("filepath") or parameters.get("target")
+                raw_result = FilesystemOperations.file_metadata(target_path)
             elif tool == "fs_search_files":
+                target_path = parameters.get("path") or parameters.get("search_root") or "."
+                pattern = (
+                    parameters.get("pattern")
+                    or parameters.get("filename_pattern")
+                    or parameters.get("filename")
+                    or parameters.get("name")
+                    or "*"
+                )
                 raw_result = FilesystemOperations.search_files(
-                    path=parameters.get("path", "."),
-                    pattern=parameters.get("pattern", "*"),
+                    path=target_path,
+                    pattern=pattern,
                     recursive=parameters.get("recursive", True),
                     max_results=parameters.get("max_results", 50),
                 )
             elif tool == "fs_make_dir":
-                raw_result = FilesystemOperations.make_dir(parameters["path"])
+                raw_result = FilesystemOperations.make_dir(parameters.get("path") or parameters.get("dir"))
             elif tool == "fs_write_text_file":
                 raw_result = FilesystemOperations.write_text_file(
                     parameters["path"],
@@ -81,15 +91,25 @@ class ActionDispatcher:
             elif tool == "fs_delete_file":
                 raw_result = FilesystemOperations.delete_file(parameters["path"])
             elif tool == "fs_open_file":
-                raw_result = FilesystemOperations.open_file(parameters["path"])
+                target_path = (
+                    parameters.get("path")
+                    or parameters.get("filepath")
+                    or parameters.get("filename")
+                    or parameters.get("file")
+                    or parameters.get("target")
+                )
+                raw_result = FilesystemOperations.open_file(target_path)
             elif tool == "fs_read_text_file":
+                target_path = parameters.get("path") or parameters.get("filepath")
                 raw_result = FilesystemOperations.read_text_file(
-                    parameters["path"],
+                    target_path,
                     max_chars=parameters.get("max_chars", 5000),
                 )
             elif tool == "fs_list_downloads":
                 raw_result = FilesystemOperations.list_downloads(
-                    limit=parameters.get("limit", 10)
+                    limit=parameters.get("limit", 10),
+                    drive=parameters.get("drive"),
+                    path=parameters.get("path"),
                 )
 
             # Process Operations

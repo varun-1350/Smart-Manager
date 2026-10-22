@@ -46,11 +46,11 @@ export default function ConfirmationModal({ request, onApprove, onReject }) {
         </div>
 
         <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={() => onReject(request.id)}>
+          <button className="btn btn-secondary" onClick={onReject}>
             <X size={16} />
             <span>Deny & Cancel</span>
           </button>
-          <button className="btn btn-danger" onClick={() => onApprove(request.id)}>
+          <button className="btn btn-danger" onClick={onApprove}>
             <Check size={16} />
             <span>Authorize Action</span>
           </button>

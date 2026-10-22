@@ -58,21 +58,16 @@ def main():
     print("Backend ready at http://127.0.0.1:8765")
 
     # 3. Determine frontend URL
-    # If production dist exists, we serve it or use dev URL
-    dist_index = project_root / "frontend" / "dist" / "index.html"
-    window_url = "http://127.0.0.1:5173"  # Default Vite dev server
+    # By default, use the local backend which serves the built frontend directly
+    window_url = f"http://{settings.smart_manager_host}:{settings.smart_manager_port}"
 
-    # Serve the production bundle through FastAPI. Opening index.html with file://
-    # breaks Vite's absolute /assets URLs and results in a blank WebView2 window.
+    # If developer explicitly started Vite dev server on 5173, use it for HMR
     try:
-        res = httpx.get("http://127.0.0.1:5173", timeout=0.5)
+        res = httpx.get("http://127.0.0.1:5173", timeout=0.3)
         if res.status_code == 200:
             window_url = "http://127.0.0.1:5173"
-        elif dist_index.exists():
-            window_url = f"http://{settings.smart_manager_host}:{settings.smart_manager_port}"
     except Exception:
-        if dist_index.exists():
-            window_url = f"http://{settings.smart_manager_host}:{settings.smart_manager_port}"
+        pass
 
     print(f"Launching desktop window pointing to: {window_url}")
 

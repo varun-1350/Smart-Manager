@@ -34,7 +34,6 @@ class ObservationVerifier:
                     obs.success = False
                     obs.error = f"Verification failed: Directory {target_path} was not created."
 
-            # 1b. Text file creation
             elif tool == "fs_write_text_file":
                 target_path = Path(parameters.get("path", ""))
                 expected_content = parameters.get("content", "")

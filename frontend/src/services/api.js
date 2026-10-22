@@ -66,12 +66,7 @@ export async function executeTaskApi(payload, signal = null) {
   return await res.json()
 }
 
-// Backwards-compatible names used by the main chat screen.
-export function executeTask(payload) {
-  return executeTaskApi(payload)
-}
-
-export async function approveTask(taskId, approved) {
+export async function approveTaskApi(taskId, approved) {
   const res = await fetch(`${API_BASE}/task/approve`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -248,3 +243,5 @@ export async function updateProviders(updates) {
   }
   return await res.json()
 }
+
+

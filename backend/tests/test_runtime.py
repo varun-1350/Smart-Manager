@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import AsyncMock, patch
 from agent.runtime import AgentRuntime
 from agent.model import OllamaClient, AgentStepDecision, ProposedAction
+from agent.context import ActionObservation
 from pathlib import Path
 
 
@@ -104,3 +105,42 @@ async def test_agent_runtime_approval_interruption_and_resumption(tmp_path: Path
         )
         assert resumed_ctx.status == "completed"
         assert not target_file.exists()  # Now verified deleted!
+
+
+@pytest.mark.asyncio
+async def test_approved_action_failure_is_reported_without_replanning(tmp_path: Path):
+    missing_file = tmp_path / "missing.txt"
+    client = OllamaClient(base_url="http://mock:11434", model="test-model")
+    runtime = AgentRuntime(client=client)
+
+    delete_decision = AgentStepDecision(
+        summary="Proposing a deletion",
+        actions=[ProposedAction(
+            tool="fs_delete_file",
+            parameters={"path": str(missing_file)},
+            reasoning="Remove the requested file",
+        )],
+    )
+
+    # A missing deletion target is currently idempotent, so simulate a failed
+    # post-approval dispatch and ensure the planner cannot claim completion.
+    with patch.object(runtime.planner, "plan_step", new_callable=AsyncMock) as mock_plan, \
+         patch("agent.runtime.ActionDispatcher.execute") as mock_execute:
+        mock_plan.return_value = delete_decision
+        mock_execute.side_effect = [
+            ActionObservation(
+                tool="fs_delete_file", parameters={"path": str(missing_file)},
+                success=False, error="WAITING_APPROVAL: confirmation required",
+            ),
+            ActionObservation(
+                tool="fs_delete_file", parameters={"path": str(missing_file)},
+                success=False, error="Access denied", verified=False,
+            ),
+        ]
+
+        ctx = await runtime.run_task(task_id="task-fail-approval", goal="Delete missing.txt")
+        resumed_ctx = await runtime.resume_task_approval(task_id="task-fail-approval", approved=True)
+
+        assert resumed_ctx.status == "failed"
+        assert "Access denied" in resumed_ctx.final_result
+        assert mock_plan.call_count == 1

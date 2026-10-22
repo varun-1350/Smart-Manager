@@ -4,6 +4,8 @@ from pathlib import Path
 from typing import Dict, Any, Tuple, Optional, Set
 from pydantic import BaseModel
 
+from execution.filesystem import resolve_system_path
+
 
 class RiskLevel(str, Enum):
     READ_ONLY = "read_only"
@@ -90,7 +92,7 @@ class SecurityPolicy:
                     )
 
                 try:
-                    resolved = Path(path_val).resolve()
+                    resolved = resolve_system_path(path_val)
                     norm_str = str(resolved).lower()
 
                     # Prevent modifying protected OS directories

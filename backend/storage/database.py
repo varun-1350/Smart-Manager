@@ -57,4 +57,61 @@ def init_db() -> None:
             )
         """)
 
+        # App Settings table (key-value store for model and provider preferences)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS app_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         conn.commit()
+
+
+class SettingsRepository:
+    """Persistent key-value store in SQLite for AI provider and model settings."""
+
+    @classmethod
+    def get(cls, key: str, default: Optional[str] = None) -> Optional[str]:
+        path = get_db_path()
+        with sqlite3.connect(path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT value FROM app_settings WHERE key = ?", (key,))
+            row = cursor.fetchone()
+            return row[0] if row else default
+
+    @classmethod
+    def set(cls, key: str, value: str) -> None:
+        path = get_db_path()
+        with sqlite3.connect(path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO app_settings (key, value, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(key) DO UPDATE SET
+                    value = excluded.value,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (key, value),
+            )
+            conn.commit()
+
+    @classmethod
+    def get_all(cls) -> Dict[str, str]:
+        path = get_db_path()
+        with sqlite3.connect(path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT key, value FROM app_settings")
+            return {row[0]: row[1] for row in cursor.fetchall()}
+
+    @classmethod
+    def delete(cls, key: str) -> bool:
+        path = get_db_path()
+        with sqlite3.connect(path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM app_settings WHERE key = ?", (key,))
+            conn.commit()
+            return cursor.rowcount > 0
+

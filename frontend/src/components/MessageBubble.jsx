@@ -11,7 +11,9 @@ import {
   Terminal,
   Folder,
   Globe,
-  Play
+  Play,
+  Copy,
+  Check
 } from 'lucide-react'
 
 function getActionIcon(toolName) {
@@ -21,9 +23,51 @@ function getActionIcon(toolName) {
   return <Play size={14} className="action-type-icon default" />
 }
 
+function CopyButton({ text, label = 'Copy', className = '' }) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = (e) => {
+    e.stopPropagation()
+    if (!text) return
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }).catch(err => {
+      console.error('Failed to copy to clipboard:', err)
+    })
+  }
+
+  return (
+    <button
+      type="button"
+      className={`copy-msg-btn ${className}`}
+      title="Copy to clipboard"
+      onClick={handleCopy}
+    >
+      {copied ? <Check size={12} className="text-emerald" /> : <Copy size={12} />}
+      <span className="copy-label">{copied ? 'Copied!' : label}</span>
+    </button>
+  )
+}
+
 export default function MessageBubble({ message }) {
   const isUser = message.role === 'user'
   const [showDetails, setShowDetails] = useState(true)
+
+  // Extract clean plain text for the clipboard copy action
+  const getCopyableContent = () => {
+    if (message.content) return message.content
+    if (message.plan?.summary) {
+      let text = `Plan: ${message.plan.summary}\n`
+      if (message.actions?.length) {
+        text += message.actions.map(a => `- ${a.tool}: ${a.summary || (typeof a.result === 'object' ? JSON.stringify(a.result) : a.result || '')}`).join('\n')
+      }
+      return text
+    }
+    return ''
+  }
+
+  const copyableText = getCopyableContent()
 
   return (
     <div className={`message-bubble-row ${isUser ? 'user-row' : 'agent-row'}`}>
@@ -40,6 +84,9 @@ export default function MessageBubble({ message }) {
               minute: '2-digit'
             })}
           </span>
+          {copyableText && (
+            <CopyButton text={copyableText} label="Copy" />
+          )}
         </div>
 
         {/* User Content */}
@@ -83,6 +130,14 @@ export default function MessageBubble({ message }) {
                   {act.summary && <div className="action-desc">{act.summary}</div>}
                   {act.result && (
                     <div className="action-result-box">
+                      <div className="action-result-header">
+                        <span className="action-result-tag">Result</span>
+                        <CopyButton
+                          text={typeof act.result === 'object' ? JSON.stringify(act.result, null, 2) : String(act.result)}
+                          label="Copy"
+                          className="action-copy-btn"
+                        />
+                      </div>
                       <pre>{typeof act.result === 'object' ? JSON.stringify(act.result, null, 2) : act.result}</pre>
                     </div>
                   )}

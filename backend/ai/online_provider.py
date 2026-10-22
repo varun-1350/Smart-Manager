@@ -100,8 +100,19 @@ class OnlineProvider(AIProvider):
         format: Optional[Any] = None,
         api_key: str = "",
     ) -> str:
-        clean_model = self._model.replace("models/", "")
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{clean_model}:generateContent?key={api_key}"
+        clean_model = self._model.replace("models/", "").strip()
+        # Google has retired older Gemini models for new projects. Auto-map to active gemini-3.5-flash:
+        model_aliases = {
+            "gemini-1.5-flash": "gemini-3.5-flash",
+            "gemini-1.5-flash-latest": "gemini-3.5-flash",
+            "gemini-2.0-flash": "gemini-3.5-flash",
+            "gemini-2.0-flash-exp": "gemini-3.5-flash",
+            "gemini-2.5-flash": "gemini-3.5-flash",
+            "gemini-1.5-pro": "gemini-3.5-flash",
+            "gemini-pro": "gemini-3.5-flash",
+        }
+        target_model = model_aliases.get(clean_model, clean_model)
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{target_model}:generateContent?key={api_key}"
         headers = {
             "Content-Type": "application/json",
             "x-goog-api-key": api_key,
@@ -125,10 +136,17 @@ class OnlineProvider(AIProvider):
 
         async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
             res = await client.post(url, headers=headers, json=payload)
+            if res.status_code == 404 and target_model != "gemini-3.5-flash":
+                # Fallback to active gemini-3.5-flash
+                fallback_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key={api_key}"
+                res = await client.post(fallback_url, headers=headers, json=payload)
+
             if res.status_code == 401:
                 raise PermissionError("Gemini API Error: Invalid or expired API credentials (401 Unauthorized).")
             if res.status_code == 429:
                 raise RuntimeError("Gemini API Error: Rate limit or quota exceeded (429 Too Many Requests).")
+            if res.status_code == 503:
+                raise RuntimeError("Gemini API Error: Model experiencing high demand. Please retry in a few seconds.")
             if res.status_code != 200:
                 err_text = res.text
                 if api_key in err_text:

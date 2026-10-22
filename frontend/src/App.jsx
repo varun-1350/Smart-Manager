@@ -12,7 +12,7 @@ import Sidebar from './components/Sidebar'
 import MessageBubble from './components/MessageBubble'
 import ConfirmationModal from './components/ConfirmationModal'
 import SettingsModal from './components/SettingsModal'
-import { fetchHealth, fetchConfig } from './services/api'
+import { fetchHealth, fetchConfig, updateConfig } from './services/api'
 
 export default function App() {
   const [conversations, setConversations] = useState([
@@ -153,9 +153,14 @@ export default function App() {
     }
   }
 
-  const handleSaveConfig = (newCfg) => {
-    setConfig((prev) => ({ ...prev, ...newCfg }))
-    refreshHealth()
+  const handleSaveConfig = async (newCfg) => {
+    try {
+      const res = await updateConfig(newCfg)
+      if (res?.config) setConfig(res.config)
+      refreshHealth()
+    } catch (err) {
+      console.error('Failed to update config', err)
+    }
   }
 
   const handleApprove = (approvalId) => {

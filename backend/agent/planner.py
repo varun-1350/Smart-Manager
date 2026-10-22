@@ -37,12 +37,15 @@ AVAILABLE TOOLS & SIGNATURES:
 """
 
 
+from config import settings
+
+
 class Planner:
     def __init__(self, client: OllamaClient):
         self.client = client
 
     async def plan_step(self, context: TaskContext) -> AgentStepDecision:
-        history_text = context.format_recent_history_for_prompt()
+        history_text = context.format_recent_history_for_prompt(max_steps=settings.agent_history_steps)
 
         user_prompt = f"""USER GOAL: {context.goal}
 

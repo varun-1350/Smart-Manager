@@ -1,7 +1,9 @@
 import json
 import re
+import asyncio
 from typing import Dict, Any, List, Optional, Type, TypeVar
 import httpx
+import psutil
 from pydantic import BaseModel, Field
 
 from config import settings
@@ -24,15 +26,31 @@ class AgentStepDecision(BaseModel):
 
 
 class OllamaClient:
+    """
+    Hardware-aware Ollama client for local language model inference.
+    Enforces concurrency limits, configurable token context windows, batch limits,
+    and automatic or on-demand VRAM unloading.
+    """
+
     def __init__(
         self,
         base_url: str = settings.ollama_base_url,
         model: str = settings.ollama_model,
         timeout_seconds: float = settings.ollama_request_timeout_seconds,
+        num_ctx: int = settings.ollama_num_ctx,
+        num_predict: int = settings.ollama_num_predict,
+        num_batch: int = settings.ollama_num_batch,
+        keep_alive: str = settings.ollama_keep_alive,
     ):
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.timeout_seconds = timeout_seconds
+        self.num_ctx = num_ctx
+        self.num_predict = num_predict
+        self.num_batch = num_batch
+        self.keep_alive = keep_alive
+        # Concurrency limit: strict single-model execution to protect 16GB RAM / 6GB VRAM
+        self._semaphore = asyncio.Semaphore(settings.agent_max_parallel_tasks)
 
     async def is_connected(self) -> bool:
         try:
@@ -56,30 +74,60 @@ class OllamaClient:
     async def is_model_available(self, model_name: Optional[str] = None) -> bool:
         target = model_name or self.model
         models = await self.list_models()
-        # Check both exact match and without tag prefix/suffix
         return any(target == m or target.split(":")[0] == m.split(":")[0] for m in models)
 
-    async def generate(self, prompt: str, system: Optional[str] = None) -> str:
+    async def unload_model(self) -> bool:
+        """
+        Explicitly unloads the current model from GPU VRAM and system memory
+        by issuing an empty prompt with keep_alive: 0.
+        """
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                res = await client.post(
+                    f"{self.base_url}/api/generate",
+                    json={"model": self.model, "keep_alive": 0},
+                )
+                return res.status_code == 200
+        except Exception:
+            return False
+
+    async def generate(
+        self,
+        prompt: str,
+        system: Optional[str] = None,
+        num_ctx: Optional[int] = None,
+    ) -> str:
+        ctx_size = num_ctx or self.num_ctx
+
         payload: Dict[str, Any] = {
             "model": self.model,
             "prompt": prompt,
             "stream": False,
+            "keep_alive": self.keep_alive,
+            "options": {
+                "num_ctx": ctx_size,
+                "num_predict": self.num_predict,
+                "num_batch": self.num_batch,
+                "temperature": 0.2,
+            },
         }
         if system:
             payload["system"] = system
 
-        async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-            res = await client.post(f"{self.base_url}/api/generate", json=payload)
-            if res.status_code != 200:
-                raise RuntimeError(f"Ollama error (HTTP {res.status_code}): {res.text}")
-            data = res.json()
-            return data.get("response", "").strip()
+        async with self._semaphore:
+            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+                res = await client.post(f"{self.base_url}/api/generate", json=payload)
+                if res.status_code != 200:
+                    raise RuntimeError(f"Ollama error (HTTP {res.status_code}): {res.text}")
+                data = res.json()
+                return data.get("response", "").strip()
 
     async def generate_structured(
         self,
         prompt: str,
         response_model: Type[T],
         system: Optional[str] = None,
+        num_ctx: Optional[int] = None,
         retries: int = 2,
     ) -> T:
         """
@@ -94,7 +142,11 @@ class OllamaClient:
         )
 
         for attempt in range(retries + 1):
-            raw_output = await self.generate(prompt=prompt, system=system_instruction)
+            raw_output = await self.generate(
+                prompt=prompt,
+                system=system_instruction,
+                num_ctx=num_ctx,
+            )
             cleaned_json = self._extract_json(raw_output)
 
             if cleaned_json:
@@ -104,7 +156,9 @@ class OllamaClient:
                     return validated
                 except Exception as e:
                     if attempt == retries:
-                        raise ValueError(f"Failed to validate model output against {response_model.__name__}: {e}\nRaw output: {raw_output}")
+                        raise ValueError(
+                            f"Failed to validate model output against {response_model.__name__}: {e}\nRaw output: {raw_output}"
+                        )
             elif attempt == retries:
                 raise ValueError(f"Model output did not contain valid JSON.\nRaw output: {raw_output}")
 
@@ -116,16 +170,13 @@ class OllamaClient:
     @staticmethod
     def _extract_json(text: str) -> Optional[str]:
         text = text.strip()
-        # Direct JSON match
         if text.startswith("{") and text.endswith("}"):
             return text
 
-        # Check for ```json ... ``` blocks
         match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
         if match:
             return match.group(1)
 
-        # Find first { and last }
         start = text.find("{")
         end = text.rfind("}")
         if start != -1 and end != -1 and end > start:

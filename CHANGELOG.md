@@ -2,7 +2,30 @@
 
 All notable changes to the Smart Manager project will be documented in this file.
 
-## [0.2.0] - Autonomous Local Agent Runtime, Windows Interaction & Safety Layer (Current)
+## [0.2.1] - Hardware-Aware Development & Resource Optimization Add-on (Current)
+
+### Added
+- **Hardware Diagnostic & Benchmark Suite** ([backend/benchmark_hardware.py](file:///d:/my%20projects/Smart-Manager/backend/benchmark_hardware.py)):
+  - Empirical benchmarking for RTX 3050 (6GB VRAM) and 16GB RAM.
+  - Measured 4096 vs 2048 token context windows: 2048-token context window runs at 121.4 tok/s and 2940 MB VRAM, keeping >3.2 GB VRAM free.
+  - On-demand and automated VRAM unloading: drops GPU VRAM from 2952 MB to 112 MB and process RAM from 3008 MB to 52 MB.
+- **Hardware-Aware Ollama Client** ([backend/agent/model.py](file:///d:/my%20projects/Smart-Manager/backend/agent/model.py)):
+  - Added strict concurrency control (`asyncio.Semaphore(1)`) to guarantee only 1 model executes at any time, eliminating memory collisions.
+  - Added configurable parameters for context size (`num_ctx`), prediction length (`num_predict`), evaluation batch (`num_batch`), and idle unload (`keep_alive`).
+  - Added `unload_model()` to purge model weights and memory on demand.
+- **Resource Monitoring & Control API** ([backend/app.py](file:///d:/my%20projects/Smart-Manager/backend/app.py)):
+  - Added `GET /api/system/resources` endpoint reporting live system RAM, process RAM, and GPU VRAM via `nvidia-smi`.
+  - Added `POST /api/model/unload` endpoint for on-demand memory liberation.
+  - Added resource configuration update support in `POST /api/config`.
+- **UI Diagnostics & Memory Controls** ([frontend/src/components/SettingsModal.jsx](file:///d:/my%20projects/Smart-Manager/frontend/src/components/SettingsModal.jsx)):
+  - Added live hardware telemetry card displaying RAM and RTX 3050 VRAM usage.
+  - Added "Free VRAM Now" button for instant memory release.
+  - Added interactive context window selector (2048 vs 4096 tokens) and idle timeout selector (2m, 5m, 15m, 0s).
+- **Prompt Token Guarding**:
+  - Bounded directory listing to 50 items in [backend/execution/filesystem.py](file:///d:/my%20projects/Smart-Manager/backend/execution/filesystem.py).
+  - Bounded recent prompt history to 3 steps in [backend/agent/planner.py](file:///d:/my%20projects/Smart-Manager/backend/agent/planner.py).
+- **Automated Tests**:
+  - Added [backend/tests/test_hardware_resource.py](file:///d:/my%20projects/Smart-Manager/backend/tests/test_hardware_resource.py) (all 21 backend tests passing).
 
 ### Added
 - **Local AI Integration & Structured Action Pipeline**:

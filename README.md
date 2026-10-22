@@ -68,6 +68,12 @@ Smart Manager strictly separates model decision-making from operating system int
 ## Current Status: Version 0.2.0
 
 - [x] **Local AI Integration**: Ollama client with structured JSON Schema output validation and malformed recovery.
+- [x] **Hardware-Aware Resource Optimization (RTX 3050 6GB / 16GB RAM)**:
+  - Strict single-model concurrency gate (`asyncio.Semaphore(1)`).
+  - Configurable context window (2048 tokens default, saving memory while keeping >3.2 GB VRAM free).
+  - Empirical benchmarking tool ([backend/benchmark_hardware.py](file:///d:/my%20projects/Smart-Manager/backend/benchmark_hardware.py)): ~121-123 tokens/sec on RTX 3050.
+  - On-demand and automatic VRAM/RAM unloading (`keep_alive` & `/api/model/unload`) dropping VRAM to 112 MB and process RAM to 52 MB.
+  - Live hardware telemetry endpoint (`/api/system/resources`) and UI memory gauge.
 - [x] **Autonomous Agent Loop**: Iterative observe-plan-act-verify loop with bounded execution.
 - [x] **Windows Interaction Layer**:
   - Filesystem: search, list, metadata, directory creation, copy, move, rename, delete, open.

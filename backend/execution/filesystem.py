@@ -33,7 +33,8 @@ class FilesystemOperations:
         return {
             "path": str(p),
             "count": len(entries),
-            "entries": entries[:200],  # Bound result set
+            "truncated": len(entries) > 50,
+            "entries": entries[:50],  # Bound result set to prevent token explosion
         }
 
     @staticmethod

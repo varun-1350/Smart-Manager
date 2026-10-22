@@ -61,28 +61,8 @@ class ConfigUpdateRequest(BaseModel):
     ollama_model: Optional[str] = None
     max_iterations: Optional[int] = None
     confirmation_required: Optional[bool] = None
-
-
-class PingPromptRequest(BaseModel):
-    prompt: str = "Hello, are you operational?"
-
-
-class PingPromptResponse(BaseModel):
-    success: bool
-    model: str
-    response: str
-    total_duration_ms: float = 0.0
-
-
-class TaskExecuteRequest(BaseModel):
-    task_id: str
-    prompt: str
-    conversation_id: str = "default"
-
-
-class TaskApprovalRequest(BaseModel):
-    task_id: str
-    approved: bool
+    num_ctx: Optional[int] = None
+    keep_alive: Optional[str] = None
 
 
 @app.get("/api/health", response_model=HealthResponse)
@@ -117,6 +97,9 @@ async def get_config() -> Dict[str, Any]:
         "ollama_model": ollama_client.model,
         "max_iterations": settings.agent_max_iterations,
         "confirmation_required": settings.agent_default_confirmation_required,
+        "num_ctx": ollama_client.num_ctx,
+        "keep_alive": ollama_client.keep_alive,
+        "num_predict": ollama_client.num_predict,
     }
 
 
@@ -129,8 +112,80 @@ async def update_config(req: ConfigUpdateRequest) -> Dict[str, Any]:
         settings.agent_max_iterations = req.max_iterations
     if req.confirmation_required is not None:
         settings.agent_default_confirmation_required = req.confirmation_required
+    if req.num_ctx:
+        ollama_client.num_ctx = req.num_ctx
+        settings.ollama_num_ctx = req.num_ctx
+    if req.keep_alive:
+        ollama_client.keep_alive = req.keep_alive
+        settings.ollama_keep_alive = req.keep_alive
 
     return {"status": "updated", "config": await get_config()}
+
+
+@app.post("/api/model/unload")
+async def unload_model():
+    success = await ollama_client.unload_model()
+    return {
+        "success": success,
+        "message": "Model unloaded from GPU and RAM" if success else "Failed to signal unload to Ollama",
+    }
+
+
+@app.get("/api/system/resources")
+async def get_system_resources():
+    import psutil
+    import subprocess
+
+    vm = psutil.virtual_memory()
+
+    # Relevant AI & python process memory
+    proc_info = []
+    for p in psutil.process_iter(["pid", "name", "memory_info"]):
+        try:
+            name = p.info["name"].lower()
+            if any(k in name for k in ["python", "ollama", "llama"]):
+                mem_mb = round(p.info["memory_info"].rss / (1024 * 1024), 2)
+                proc_info.append({"pid": p.info["pid"], "name": p.info["name"], "memory_mb": mem_mb})
+        except Exception:
+            continue
+
+    # GPU VRAM inspection via nvidia-smi
+    gpu_info = None
+    try:
+        res = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.total,memory.used,memory.free,utilization.gpu", "--format=csv,noheader,nounits"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        if res.returncode == 0 and res.stdout.strip():
+            parts = [p.strip() for p in res.stdout.strip().split(",")]
+            if len(parts) >= 4:
+                gpu_info = {
+                    "vram_total_mb": float(parts[0]),
+                    "vram_used_mb": float(parts[1]),
+                    "vram_free_mb": float(parts[2]),
+                    "gpu_util_percent": float(parts[3]),
+                }
+    except Exception:
+        gpu_info = None
+
+    return {
+        "system_ram": {
+            "total_gb": round(vm.total / (1024**3), 2),
+            "available_gb": round(vm.available / (1024**3), 2),
+            "used_gb": round(vm.used / (1024**3), 2),
+            "percent": vm.percent,
+        },
+        "gpu_vram": gpu_info,
+        "ai_processes": proc_info,
+        "active_settings": {
+            "model": ollama_client.model,
+            "num_ctx": ollama_client.num_ctx,
+            "keep_alive": ollama_client.keep_alive,
+            "num_predict": ollama_client.num_predict,
+        },
+    }
 
 
 @app.get("/api/conversations")
@@ -141,6 +196,28 @@ async def get_conversations():
 @app.get("/api/conversations/{conv_id}/messages")
 async def get_messages(conv_id: str):
     return HistoryRepository.get_messages(conv_id)
+
+
+class PingPromptRequest(BaseModel):
+    prompt: str = "Hello, are you operational?"
+
+
+class PingPromptResponse(BaseModel):
+    success: bool
+    model: str
+    response: str
+    total_duration_ms: float = 0.0
+
+
+class TaskExecuteRequest(BaseModel):
+    task_id: str
+    prompt: str
+    conversation_id: str = "default"
+
+
+class TaskApprovalRequest(BaseModel):
+    task_id: str
+    approved: bool
 
 
 @app.post("/api/task/execute")

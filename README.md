@@ -51,11 +51,7 @@ SQLite uses WAL mode, foreign keys, a busy timeout, indexed history, and a durab
 
 ## Start the app
 
-Double-click or run:
-
-```powershell
-.\Launch-SmartManager.bat
-```
+Double-click SmartManager.exe
 
 The launcher reads the selected provider:
 

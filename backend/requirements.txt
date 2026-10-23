@@ -9,3 +9,5 @@ python-dotenv>=1.0.0,<2.0.0
 psutil>=5.9.0,<6.2.0
 aiofiles>=23.2.0,<25.0.0
 websockets>=12.0,<14.0
+# PyInstaller uses Pillow to convert the source PNG into the Windows executable icon.
+Pillow>=10.0.0,<12.0.0

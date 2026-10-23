@@ -107,9 +107,6 @@ export default function MessageBubble({ message }) {
               minute: '2-digit'
             })}
           </span>
-          {copyableText && (
-            <CopyButton text={copyableText} label="Copy" />
-          )}
         </div>
 
         {/* User Content */}
@@ -118,13 +115,19 @@ export default function MessageBubble({ message }) {
         {/* Agent Plan / Reasoning */}
         {!isUser && message.plan && (
           <div className="agent-plan-card">
-            <div className="plan-header" onClick={() => setShowDetails(!showDetails)}>
+            <button
+              type="button"
+              className="plan-header"
+              onClick={() => setShowDetails(!showDetails)}
+              aria-expanded={showDetails}
+              aria-label={`${showDetails ? 'Hide' : 'Show'} activity details`}
+            >
               <span className="plan-title">
                 {showDetails ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 Activity{message.actions?.length ? ` · ${message.actions.length}` : ''}
               </span>
               <StatusBadge status={message.status} />
-            </div>
+            </button>
             {showDetails && (
               <div className="plan-body">
                 <p className="plan-summary">{message.plan.summary}</p>
@@ -175,6 +178,12 @@ export default function MessageBubble({ message }) {
         {!isUser && message.content && message.status !== 'waiting_approval' && (
           <div className="agent-text markdown-body">
             {message.content}
+          </div>
+        )}
+
+        {copyableText && (
+          <div className="message-actions">
+            <CopyButton text={copyableText} label="Copy response" className="message-copy-btn" />
           </div>
         )}
       </div>

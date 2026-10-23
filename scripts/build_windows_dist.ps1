@@ -25,9 +25,14 @@ if (-not $SkipFrontendBuild) {
 Write-Host "[2/3] Bundling desktop application with PyInstaller..." -ForegroundColor Yellow
 $PythonExe = "$ProjectRoot\.venv\Scripts\python.exe"
 $PyInstallerExe = "$ProjectRoot\.venv\Scripts\pyinstaller.exe"
+$AppIcon = "$ProjectRoot\frontend\src\assets\logo.png"
 
 if (-not (Test-Path $PyInstallerExe)) {
     throw "PyInstaller is not installed in .venv. Run: pip install pyinstaller"
+}
+
+if (-not (Test-Path $AppIcon)) {
+    throw "Application icon was not found at: $AppIcon"
 }
 
 Push-Location $ProjectRoot
@@ -37,6 +42,7 @@ try {
         --onedir `
         --noconsole `
         --name "SmartManager" `
+        --icon "$AppIcon" `
         --distpath "$ProjectRoot\dist" `
         --workpath "$ProjectRoot\build" `
         --add-data "backend;backend" `

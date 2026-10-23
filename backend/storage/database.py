@@ -62,10 +62,6 @@ def init_db() -> None:
                 FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
             )
         """)
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_conversation_created ON messages(conversation_id, created_at)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_action_logs_task_created ON action_logs(task_id, created_at)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_events_task_created ON task_events(task_id, created_at)")
-
         # Messages table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS messages (
@@ -95,6 +91,13 @@ def init_db() -> None:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+
+        # Create indexes only after their tables. Existing installations may
+        # have a database created by an older version, so this ordering keeps
+        # startup migrations idempotent instead of failing before tables exist.
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_conversation_created ON messages(conversation_id, created_at)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_action_logs_task_created ON action_logs(task_id, created_at)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_events_task_created ON task_events(task_id, created_at)")
 
         # App Settings table (key-value store for model and provider preferences)
         cursor.execute("""

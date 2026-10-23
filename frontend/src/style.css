@@ -51,6 +51,42 @@ body {
   color: #ffffff;
 }
 
+/* Cross-browser scrollbars keep scrollable chat and modal surfaces within the dark theme. */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: #30363d transparent;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #30363d transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  min-height: 40px;
+  background: #30363d;
+  border: 2px solid transparent;
+  border-radius: 9999px;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: #484f58;
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 /* App Layout */
 .app-container {
   display: flex;
@@ -293,13 +329,20 @@ body {
 }
 
 .chat-header-model-pill {
-  font-size: 12px;
-  padding: 4px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
   background-color: var(--bg-tertiary);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-full);
   color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1;
+  overflow: visible;
 }
+
+.chat-header-model-label { white-space: nowrap; }
 
 .messages-stream-container {
   flex: 1;
@@ -348,7 +391,7 @@ body {
   font-size: 14px;
   color: var(--text-secondary);
   line-height: 1.6;
-  margin-bottom: 32px;
+  margin-bottom: 0;
 }
 
 .suggestions-grid {
@@ -1303,10 +1346,11 @@ body {
 }
 
 .pulse-dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
   border-radius: 50%;
-  background-color: var(--accent-emerald);
+  background-color: #10b981;
   animation: pulseGreen 1.8s infinite;
 }
 
@@ -1557,11 +1601,24 @@ body {
 }
 
 .welcome-logo-img {
+  display: block;
   width: 72px;
   height: 72px;
   object-fit: contain;
   border-radius: 16px;
   filter: drop-shadow(0 0 20px rgba(59, 130, 246, 0.45));
+}
+
+.welcome-logo-fallback {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  border-radius: 16px;
+  background: linear-gradient(135deg, #2563eb, #06b6d4);
+  color: #ffffff;
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.35);
 }
 
 /* Settings Tabs Bar */
@@ -2094,11 +2151,37 @@ button, textarea { font: inherit; }
 button:focus-visible, textarea:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 button { min-height: 44px; }
 
+/* The logo is bundled with the app; the fallback keeps the brand marker visible if it cannot load. */
+.app-logo {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  overflow: hidden;
+}
+.app-logo-img,
+.app-logo-fallback {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.app-logo-img { object-fit: contain; }
+.app-logo-fallback {
+  display: grid;
+  place-items: center;
+  border-radius: inherit;
+  background: linear-gradient(135deg, #2563eb, #06b6d4);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
 .chat-header { height: 68px; padding: 0 32px; }
 .chat-header-title-wrap { min-width: 0; display: flex; align-items: center; gap: 12px; }
 .chat-header-title { font-size: 18px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .task-count-pill { color: var(--text-secondary); font-size: 13px; white-space: nowrap; }
-.chat-header-model-pill { min-height: 36px; display: inline-flex; align-items: center; color: var(--text-secondary); }
+.chat-header-model-pill { color: var(--text-secondary); }
 .messages-stream-container { padding: 32px max(24px, calc((100% - 960px) / 2)); gap: 28px; }
 .message-bubble-row { width: 100%; }
 .message-bubble-content { max-width: 900px; width: 100%; }
@@ -2106,12 +2189,76 @@ button { min-height: 44px; }
 .timestamp, .status-subtext, .ram-subtext { color: var(--text-secondary); }
 .copy-msg-btn, .history-clear-btn, .history-delete-btn { min-width: 44px; min-height: 44px; }
 .copy-msg-btn { justify-content: center; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .agent-plan-card { border-color: rgba(148, 163, 184, 0.2); }
 .plan-header { min-height: 48px; cursor: pointer; }
 .plan-status-badge { text-transform: capitalize; background: rgba(245, 158, 11, 0.16); color: #fcd34d; }
 .action-tool-name { color: var(--text-primary); font-size: 14px; }
 .action-error-box { color: #fecdd3; background: rgba(244, 63, 94, 0.12); }
 .chat-textarea:disabled { cursor: not-allowed; opacity: 0.62; }
+
+/* Dense workflow information stays available, but does not dominate the chat. */
+.agent-plan-card { margin-top: 8px; box-shadow: none; }
+.plan-header { padding: 0 14px; }
+.plan-title { font-size: 13px; color: var(--text-secondary); }
+.plan-status-badge { font-size: 12px; font-weight: 700; letter-spacing: 0; }
+.plan-status-badge.status-waiting_approval { color: #fde68a; background: rgba(245, 158, 11, 0.16); }
+.plan-status-badge.status-completed, .plan-status-badge.status-success { color: #a7f3d0; background: rgba(16, 185, 129, 0.14); }
+.plan-status-badge.status-failed { color: #fecdd3; background: rgba(244, 63, 94, 0.14); }
+.plan-body { padding: 12px 14px; }
+.plan-summary { font-size: 14px; line-height: 1.55; color: var(--text-secondary); }
+.action-timeline { padding-left: 2px; }
+.timeline-content { box-shadow: none; }
+.action-result-box { max-height: 260px; overflow: auto; }
+
+/* Sidebar actions share one predictable control rhythm. */
+.sidebar-action {
+  min-height: 44px;
+  border-radius: var(--radius-md);
+  padding: 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.new-chat-btn.sidebar-action, .footer-btn.sidebar-action { width: 100%; }
+.history-item-btn { min-width: 0; min-height: 44px; padding: 0 12px; }
+.history-title, .status-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history-delete-btn { width: 44px; height: 44px; margin-right: 0; }
+.ram-optimizer-card { padding: 0; background: transparent; border: 0; margin-bottom: 0; }
+.ram-optimizer-card:hover { border-color: transparent; box-shadow: none; }
+.ram-status-row { display: block; }
+.ram-label-wrap { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
+.ram-purge-quick-btn.sidebar-action { width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; border-color: rgba(16, 185, 129, 0.35); }
+.model-badge { min-height: 44px; display: flex; align-items: center; border-radius: var(--radius-md); padding: 0 12px; }
+.status-indicator-row { min-width: 0; width: 100%; }
+.status-text { font-size: 14px; color: var(--text-primary); }
+
+/* Activity status is an unobtrusive icon, with its meaning available to assistive technology and hover. */
+.plan-status-badge { width: 28px; height: 28px; min-height: 28px; padding: 0; display: inline-grid; place-items: center; border: 1px solid transparent; }
+.plan-status-badge.status-warning { color: #fcd34d; background: rgba(245, 158, 11, 0.12); border-color: rgba(245, 158, 11, 0.24); }
+.plan-status-badge.status-success { color: #86efac; background: rgba(16, 185, 129, 0.12); border-color: rgba(16, 185, 129, 0.24); }
+.plan-status-badge.status-failed { color: #fda4af; background: rgba(244, 63, 94, 0.12); border-color: rgba(244, 63, 94, 0.24); }
+.plan-status-badge.status-working { color: #93c5fd; background: rgba(59, 130, 246, 0.12); border-color: rgba(59, 130, 246, 0.24); }
+.plan-status-badge.status-muted { color: #cbd5e1; background: rgba(148, 163, 184, 0.1); border-color: rgba(148, 163, 184, 0.2); }
+
+/* Composer keeps a fixed action slot, so Send and Stop never shift the input. */
+.chat-input-container { padding: 16px max(24px, calc((100% - 960px) / 2)) 24px; }
+.chat-input-box { min-height: 64px; display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 18px; }
+.chat-textarea { align-self: stretch; min-height: 44px; padding: 10px 0; display: flex; align-items: center; font-size: 16px; color: var(--text-primary); }
+.chat-textarea::placeholder { color: #a8b6c9; opacity: 1; }
+.input-button-group { width: 112px; min-width: 112px; height: 44px; display: flex; justify-content: flex-end; }
+.chat-send-btn, .chat-stop-btn { width: 112px; height: 44px; min-height: 44px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-md); }
+.chat-send-btn { width: 44px; }
+
+/* AA-friendly supporting text and compact technical values. */
+.timestamp, .action-time, .action-desc, .plan-summary, .thinking-subheading { color: #b6c3d5; }
+.action-result-box pre, .approval-details, .params-code-block pre { font-size: 13px; line-height: 1.55; color: #d5deea; }
+.action-timeline { margin-top: 8px; }
+.welcome-screen { gap: 16px; }
+.welcome-subtitle { max-width: 460px; font-size: 16px; }
+.suggestions-grid { margin-top: 8px; }
+.suggestion-chip { min-height: 44px; padding: 10px 14px; font-size: 14px; }
+.ram-label { font-size: 13px; }
+.ram-subtext { font-size: 12px; }
 
 .modal-overlay { align-items: center; justify-content: center; padding: 24px; background: rgba(2, 6, 23, 0.72); backdrop-filter: blur(5px); }
 .confirmation-modal { width: min(100%, 520px); padding: 28px; border: 1px solid rgba(96, 165, 250, 0.35); border-radius: 18px; background: #121a29; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6); }

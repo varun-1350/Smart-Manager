@@ -2,10 +2,6 @@ import React, { useState, useEffect, useRef } from 'react'
 import {
   Send,
   Sparkles,
-  Search,
-  FolderOpen,
-  HardDrive,
-  Globe,
   Loader2,
   Square,
   Zap,
@@ -30,6 +26,7 @@ import {
   fetchConversations,
   fetchMessages,
 } from './services/api'
+import logoAsset from './assets/logo.png'
 
 export default function App() {
   const [conversations, setConversations] = useState([
@@ -48,6 +45,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false)
   const [isUnloading, setIsUnloading] = useState(false)
   const [toastMessage, setToastMessage] = useState(null)
+  const [hasWelcomeLogoError, setHasWelcomeLogoError] = useState(false)
 
   const messagesEndRef = useRef(null)
   const abortControllerRef = useRef(null)
@@ -170,7 +168,7 @@ export default function App() {
     try {
       await unloadModel()
       await refreshHealth()
-      showToast('⚡ 3.0 GB RAM freed! Model unloaded.', 'success')
+      showToast('Model memory released.', 'success')
     } catch (err) {
       showToast(`Error freeing RAM: ${err.message}`, 'error')
     } finally {
@@ -201,7 +199,7 @@ export default function App() {
     const stoppedMsg = {
       id: `msg-${Date.now()}`,
       role: 'agent',
-      content: '⏹️ Task was stopped by the user. llama-server memory (~3GB) released.',
+      content: 'Task stopped.',
       status: 'cancelled',
       timestamp: Date.now(),
     }
@@ -214,7 +212,7 @@ export default function App() {
       )
     )
 
-    showToast('Task stopped. Memory freed.', 'info')
+    showToast('Task stopped.', 'info')
     refreshHealth()
   }
 
@@ -394,15 +392,15 @@ export default function App() {
             <h2 className="chat-header-title">
               {activeConv?.title || 'Smart Manager'}
             </h2>
-            <span className="task-count-pill">
-              {activeConv?.messages?.length || 0} messages
-            </span>
+            {(activeConv?.messages?.length || 0) > 0 && <span className="task-count-pill">
+              {activeConv.messages.length}
+            </span>}
           </div>
 
           <div className="header-actions-group">
-            <div className="chat-header-model-pill">
-              <span className="pulse-dot" />
-              <span>
+            <div className="chat-header-model-pill" aria-live="polite">
+              <span className="pulse-dot" aria-hidden="true" />
+              <span className="chat-header-model-label">
                 {health?.active_provider_label || health?.active_model || 'Connecting...'}
               </span>
             </div>
@@ -416,54 +414,24 @@ export default function App() {
           {activeConv?.messages.length === 0 ? (
             <div className="welcome-screen animate-fade-in">
               <div className="welcome-hero-logo animate-bounce-subtle">
-                <img src="/logo.png" alt="Smart Manager" className="welcome-logo-img" />
+                {hasWelcomeLogoError ? (
+                  <span className="welcome-logo-fallback" aria-label="Smart Manager">
+                    <Sparkles size={32} aria-hidden="true" />
+                  </span>
+                ) : (
+                  <img
+                    src={logoAsset}
+                    alt="Smart Manager"
+                    className="welcome-logo-img"
+                    onError={() => setHasWelcomeLogoError(true)}
+                  />
+                )}
               </div>
               <h2 className="welcome-title">What can I do for you today?</h2>
               <p className="welcome-subtitle">
-                Describe any Windows task in plain English. Smart Manager plans and
-                executes approved filesystem, process, and browser operations locally.
+                Tell Smart Manager what you want to do.
               </p>
 
-              <div className="suggestions-grid">
-                <button
-                  className="suggestion-chip hover-scale"
-                  onClick={() =>
-                    handleSendPrompt(
-                      'open pdf: Litrature_Review in downloads folder in d drive'
-                    )
-                  }
-                >
-                  <Search size={16} />
-                  <span>"Open Literature Review PDF in D:\Downloads"</span>
-                </button>
-                <button
-                  className="suggestion-chip hover-scale"
-                  onClick={() =>
-                    handleSendPrompt('Find Cat.png in D drive and open it.')
-                  }
-                >
-                  <FolderOpen size={16} />
-                  <span>"Find Cat.png in D drive and open it."</span>
-                </button>
-                <button
-                  className="suggestion-chip hover-scale"
-                  onClick={() =>
-                    handleSendPrompt('Find large files and help me free storage.')
-                  }
-                >
-                  <HardDrive size={16} />
-                  <span>"Find large files to free storage."</span>
-                </button>
-                <button
-                  className="suggestion-chip hover-scale"
-                  onClick={() =>
-                    handleSendPrompt('Search for Python tutorials on Google.')
-                  }
-                >
-                  <Globe size={16} />
-                  <span>"Search for Python tutorials on Google."</span>
-                </button>
-              </div>
             </div>
           ) : (
             activeConv.messages.map((m) => (
@@ -505,7 +473,7 @@ export default function App() {
           <div className="chat-input-box">
             <textarea
               className="chat-textarea"
-              placeholder="Ask Smart Manager to perform any Windows task..."
+              placeholder={isAwaitingApproval ? 'Review the approval request above' : 'What would you like to do?'}
               value={inputPrompt}
               onChange={(e) => setInputPrompt(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -520,7 +488,8 @@ export default function App() {
                 <button
                   className="chat-stop-btn animate-pulse-glow"
                   onClick={handleStopTask}
-                  title="Stop Task & Free Memory"
+                  title="Stop task"
+                  aria-label="Stop task"
                 >
                   <Square size={15} fill="currentColor" />
                   <span>Stop</span>
@@ -531,6 +500,7 @@ export default function App() {
                   onClick={() => handleSendPrompt()}
                   disabled={!inputPrompt.trim() || isAwaitingApproval}
                   title="Send Prompt (Enter)"
+                  aria-label="Send task"
                 >
                   <Send size={18} />
                 </button>

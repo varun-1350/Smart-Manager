@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import {
   Plus,
   MessageSquare,
@@ -8,6 +8,7 @@ import {
   Zap,
   Sparkles,
 } from 'lucide-react'
+import logoAsset from '../assets/logo.png'
 
 export default function Sidebar({
   conversations,
@@ -21,12 +22,23 @@ export default function Sidebar({
   onUnloadModel,
   isUnloading,
 }) {
+  const [hasLogoError, setHasLogoError] = useState(false)
+
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
         <div className="app-branding">
           <div className="app-logo">
-            <img src="/logo.png" alt="Smart Manager Logo" className="app-logo-img" />
+            {hasLogoError ? (
+              <span className="app-logo-fallback" aria-label="Smart Manager">SM</span>
+            ) : (
+              <img
+                src={logoAsset}
+                alt="Smart Manager"
+                className="app-logo-img"
+                onError={() => setHasLogoError(true)}
+              />
+            )}
           </div>
           <div className="app-title-group">
             <h1 className="app-title">Smart Manager</h1>
@@ -34,7 +46,7 @@ export default function Sidebar({
           </div>
         </div>
         <button
-          className="new-chat-btn"
+          className="new-chat-btn sidebar-action"
           onClick={onNewConversation}
           title="Start new task"
         >
@@ -45,7 +57,7 @@ export default function Sidebar({
 
       <div className="sidebar-history-container">
         <div className="history-header-row">
-          <div className="history-label">Tasks & History</div>
+          <div className="history-label">Tasks</div>
           {conversations.length > 0 && (
             <button
               className="history-clear-btn"
@@ -53,7 +65,7 @@ export default function Sidebar({
               title="Clear all tasks"
             >
               <Trash2 size={12} />
-              <span>Clear all</span>
+              <span>Clear</span>
             </button>
           )}
         </div>
@@ -101,22 +113,21 @@ export default function Sidebar({
           <div className="ram-status-row">
             <div className="ram-label-wrap">
               <Zap size={14} className="ram-zap-icon" />
-              <span className="ram-label">RAM Minimizer</span>
+              <span className="ram-label">Memory</span>
             </div>
             <button
-              className={`ram-purge-quick-btn ${isUnloading ? 'loading' : ''}`}
+              className={`ram-purge-quick-btn sidebar-action ${isUnloading ? 'loading' : ''}`}
               onClick={onUnloadModel}
               disabled={isUnloading}
-              title="Purge model from memory to free ~3 GB RAM immediately"
+              title="Release the local model from memory"
             >
               <span>{isUnloading ? 'Releasing…' : 'Release memory'}</span>
             </button>
           </div>
-          <div className="ram-subtext">Model memory releases automatically after tasks.</div>
         </div>
 
         {/* Model Status Card */}
-        <div className="model-status-card">
+        <div className="model-status-card model-badge">
           <div className="status-indicator-row">
             <span
               className={`status-dot ${
@@ -127,14 +138,11 @@ export default function Sidebar({
               {health?.active_provider_label || health?.active_model || 'Local Engine'}
             </span>
           </div>
-          <div className="status-subtext">
-            {health?.active_provider_label ? 'ACTIVE MODEL' : 'LOCAL AI READY'}
-          </div>
         </div>
 
         <div className="footer-actions">
           <button
-            className="footer-btn"
+            className="footer-btn sidebar-action"
             onClick={onOpenSettings}
             title="Settings & Hardware"
           >

@@ -32,6 +32,19 @@ function actionLabel(toolName) {
   return labels[toolName] || 'System action'
 }
 
+function StatusBadge({ status }) {
+  const config = {
+    waiting_approval: { label: 'Approval needed', icon: AlertTriangle, tone: 'warning' },
+    completed: { label: 'Completed', icon: CheckCircle2, tone: 'success' },
+    success: { label: 'Completed', icon: CheckCircle2, tone: 'success' },
+    failed: { label: 'Needs attention', icon: XCircle, tone: 'failed' },
+    cancelled: { label: 'Stopped', icon: XCircle, tone: 'muted' },
+    running: { label: 'Working', icon: Clock, tone: 'working' },
+  }[status] || { label: 'Planned', icon: Clock, tone: 'muted' }
+  const Icon = config.icon
+  return <span className={`plan-status-badge status-${config.tone}`} title={config.label} aria-label={config.label}><Icon size={14} /></span>
+}
+
 function CopyButton({ text, label = 'Copy', className = '' }) {
   const [copied, setCopied] = useState(false)
 
@@ -51,10 +64,11 @@ function CopyButton({ text, label = 'Copy', className = '' }) {
       type="button"
       className={`copy-msg-btn ${className}`}
       title="Copy to clipboard"
+      aria-label={copied ? 'Copied' : 'Copy message'}
       onClick={handleCopy}
     >
       {copied ? <Check size={12} className="text-emerald" /> : <Copy size={12} />}
-      <span className="copy-label">{copied ? 'Copied!' : label}</span>
+      <span className="copy-label sr-only">{copied ? 'Copied' : label}</span>
     </button>
   )
 }
@@ -107,9 +121,9 @@ export default function MessageBubble({ message }) {
             <div className="plan-header" onClick={() => setShowDetails(!showDetails)}>
               <span className="plan-title">
                 {showDetails ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                Planned action{message.actions?.length === 1 ? '' : 's'} ({message.actions?.length || 0})
+                Activity{message.actions?.length ? ` · ${message.actions.length}` : ''}
               </span>
-              <span className="plan-status-badge">{message.status || 'in_progress'}</span>
+              <StatusBadge status={message.status} />
             </div>
             {showDetails && (
               <div className="plan-body">
@@ -158,7 +172,7 @@ export default function MessageBubble({ message }) {
         )}
 
         {/* Agent Final Output Text */}
-        {!isUser && message.content && (
+        {!isUser && message.content && message.status !== 'waiting_approval' && (
           <div className="agent-text markdown-body">
             {message.content}
           </div>

@@ -11,7 +11,7 @@ async def test_health_endpoint():
         assert res.status_code == 200
         data = res.json()
         assert data["status"] == "healthy"
-        assert data["version"] == "0.2.0"
+        assert data["version"] == "0.4.0"
         assert "ollama_connected" in data
         assert "active_model" in data
 

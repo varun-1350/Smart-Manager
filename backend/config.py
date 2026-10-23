@@ -1,6 +1,6 @@
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field
+from pydantic import Field, field_validator
 
 
 class Settings(BaseSettings):
@@ -37,6 +37,22 @@ class Settings(BaseSettings):
     database_url: str = Field(default="sqlite:///data/smart_manager.db", description="SQLite database path")
     log_level: str = Field(default="INFO", description="Logging level")
     debug: bool = Field(default=False, description="Debug mode flag")
+    api_session_secret: str = Field(default="", description="Per-launch desktop-to-backend session secret")
+
+    @field_validator("smart_manager_host")
+    @classmethod
+    def loopback_only(cls, value: str) -> str:
+        """The API can execute local actions, so never expose it on the LAN."""
+        if value not in {"127.0.0.1", "::1", "localhost"}:
+            raise ValueError("SMART_MANAGER_HOST must be a loopback address.")
+        return value
+
+    @field_validator("smart_manager_port")
+    @classmethod
+    def valid_port(cls, value: int) -> int:
+        if not 1 <= value <= 65535:
+            raise ValueError("SMART_MANAGER_PORT must be between 1 and 65535.")
+        return value
 
     @property
     def project_root(self) -> Path:

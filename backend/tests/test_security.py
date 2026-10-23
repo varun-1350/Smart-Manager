@@ -39,3 +39,17 @@ def test_risk_classification():
     p_unknown = SecurityPolicy.evaluate_action("format_hard_drive", {})
     assert p_unknown.allowed is False
     assert p_unknown.risk_level == RiskLevel.CRITICAL
+
+
+def test_shell_and_unsafe_url_are_denied():
+    shell = SecurityPolicy.evaluate_action("shell_run_command", {"command": "Get-ChildItem"})
+    unsafe_url = SecurityPolicy.evaluate_action("browser_open_url", {"url": "file:///C:/Windows/System32"})
+    assert shell.allowed is False  # Generic command execution is not an approved tool.
+    assert unsafe_url.allowed is False
+
+
+def test_rename_cannot_escape_parent_directory():
+    res = SecurityPolicy.evaluate_action(
+        "fs_rename_file", {"path": "D:\\Documents\\safe.txt", "new_name": "..\\escape.txt"}
+    )
+    assert res.allowed is False

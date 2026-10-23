@@ -3,6 +3,7 @@ import time
 import re
 from typing import Optional, Dict, Any, List, Type, TypeVar
 import httpx
+from urllib.parse import urlparse
 
 from ai.provider_base import AIProvider, TestResult
 from security.credentials import CredentialVault
@@ -31,7 +32,7 @@ class OnlineProvider(AIProvider):
         api_key_override: Optional[str] = None,
         provider_name: str = "online",
     ):
-        self._base_url = (base_url or SettingsRepository.get("online_base_url", "https://api.openai.com/v1")).rstrip("/")
+        self._base_url = self._validate_base_url(base_url or SettingsRepository.get("online_base_url", "https://api.openai.com/v1"))
         self._model = model or SettingsRepository.get("online_model", "gpt-4o-mini")
         self.timeout_seconds = timeout_seconds
         self._api_key_override = api_key_override
@@ -56,8 +57,17 @@ class OnlineProvider(AIProvider):
 
     @base_url.setter
     def base_url(self, value: str) -> None:
-        self._base_url = value.rstrip("/")
+        self._base_url = self._validate_base_url(value)
         SettingsRepository.set("online_base_url", self._base_url)
+
+    @staticmethod
+    def _validate_base_url(value: str) -> str:
+        """Prevent API keys and prompts from being sent to local/unsafe endpoints."""
+        cleaned = value.strip().rstrip("/")
+        parsed = urlparse(cleaned)
+        if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password:
+            raise ValueError("Online provider base URL must be an absolute HTTPS URL without credentials.")
+        return cleaned
 
     def _get_api_key(self) -> Optional[str]:
         if self._api_key_override:

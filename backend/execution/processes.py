@@ -1,4 +1,3 @@
-import os
 import subprocess
 import shutil
 from typing import Dict, Any, List, Optional
@@ -9,6 +8,7 @@ class ProcessOperations:
     @staticmethod
     def list_processes(filter_name: Optional[str] = None, limit: int = 50) -> Dict[str, Any]:
         results = []
+        limit = max(1, min(int(limit), 200))
         filter_lower = filter_name.lower() if filter_name else None
 
         for proc in psutil.process_iter(["pid", "name", "username", "cpu_percent", "memory_info"]):
@@ -60,7 +60,11 @@ class ProcessOperations:
         Launches an application or executable. Handles both direct executables
         and registered Windows applications / protocol schemes.
         """
+        if not isinstance(target, str) or not target.strip() or len(target) > 32_767:
+            raise ValueError("A valid application target is required.")
         cmd_args = args or []
+        if not isinstance(cmd_args, list) or any(not isinstance(arg, str) or len(arg) > 4_096 for arg in cmd_args):
+            raise ValueError("Process arguments must be a list of bounded strings.")
 
         # If it's a known executable or command
         resolved_exe = shutil.which(target)
@@ -68,16 +72,9 @@ class ProcessOperations:
             proc = subprocess.Popen([resolved_exe] + cmd_args, shell=False)
             return {"launched": True, "target": target, "pid": proc.pid}
 
-        # Otherwise launch via Windows shell start (e.g. for Store apps, Asphalt Legends, etc.)
-        try:
-            # os.startfile handles store apps, shortcuts, and registered protocols cleanly
-            os.startfile(target)
-            return {"launched": True, "target": target, "method": "startfile"}
-        except Exception:
-            # Fallback to powershell Start-Process
-            ps_cmd = f"Start-Process '{target}'"
-            subprocess.Popen(["powershell.exe", "-NoProfile", "-Command", ps_cmd], shell=False)
-            return {"launched": True, "target": target, "method": "powershell_start"}
+        # Do not fall back to PowerShell: interpolating a target into a command
+        # makes an application-launch request an injection primitive.
+        raise FileNotFoundError(f"Application is not available on PATH: {target}")
 
     @staticmethod
     def terminate_process(pid: int) -> Dict[str, Any]:

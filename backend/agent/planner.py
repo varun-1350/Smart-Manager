@@ -16,7 +16,7 @@ CRITICAL OPERATIONAL RULES:
    - When the user specifies a particular drive (e.g. 'in D drive', 'D:\\Downloads'), direct file operations to that drive/path (e.g. fs_list_dir(path='D:\\Downloads'), fs_list_downloads(drive='D'), or fs_search_files(path='D:\\', pattern='*Litrature*')) rather than defaulting to C:.
 6. When searching for files, use broad wildcard patterns (e.g. pattern='*Litrature*') to account for spacing or spelling differences.
 7. After a search or directory listing, copy the exact returned path into every follow-up action. Never reconstruct, shorten, or correct a filename yourself. If an exact match was not found, do not delete a similarly named file without first identifying its exact returned path.
-8. For creating or editing a text file, ALWAYS use fs_write_text_file. Do not use shell_run_command for this task.
+8. For creating or editing a text file, ALWAYS use fs_write_text_file and request confirmation before modifying an existing file.
 9. FAST COMPLETION: When proposing a terminal action that fulfills the user request (such as fs_open_file, proc_launch, browser_open_url, browser_play_youtube), or when your proposed action accomplishes the goal, you CAN set "is_complete: true" and provide "final_answer" in the SAME step. Smart Manager executes your action first and will complete immediately upon success.
 10. Return your response ONLY as valid JSON matching the schema.
 
@@ -41,7 +41,6 @@ AVAILABLE TOOLS & SIGNATURES:
 - browser_search(query: str): Open browser and search on Google.
 - browser_open_url(url: str): Open a specific website in the browser.
 - browser_play_youtube(query: str): Open browser and play/search YouTube content.
-- shell_run_command(command: str): Run controlled PowerShell command (requires user approval). Prefer fs_write_text_file for creating or editing a text file.
 """
 
 
@@ -67,7 +66,7 @@ STRATEGY TIPS:
 - When searching for a specific file by name, use fs_search_files(path="...", pattern="*name*") with wildcards instead of fs_list_dir.
 - If previous action(s) located the file, open it with fs_open_file(path="...").
 - For deletion, use the exact full path returned by a previous search or listing; a waiting-approval response means the deletion has NOT happened yet.
-- To create a .txt file, use fs_write_text_file with the requested path and content. Never use shell_run_command for file creation.
+- To create a .txt file, use fs_write_text_file with the requested path and content. It will require user confirmation before writing.
 - When proposing an opening or launching action (fs_open_file, proc_launch, browser_open_url, browser_play_youtube), you can set is_complete=true and specify final_answer in the same step for instant completion.
 - If the requested action was completed, mark is_complete=true with final_answer.
 

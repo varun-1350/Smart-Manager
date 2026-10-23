@@ -102,6 +102,7 @@ async def test_agent_runtime_approval_interruption_and_resumption(tmp_path: Path
         resumed_ctx = await runtime.resume_task_approval(
             task_id="task-del-1",
             approved=True,
+            approval_token=ctx.pending_approval["approval_token"],
         )
         assert resumed_ctx.status == "completed"
         assert not target_file.exists()  # Now verified deleted!
@@ -139,7 +140,11 @@ async def test_approved_action_failure_is_reported_without_replanning(tmp_path: 
         ]
 
         ctx = await runtime.run_task(task_id="task-fail-approval", goal="Delete missing.txt")
-        resumed_ctx = await runtime.resume_task_approval(task_id="task-fail-approval", approved=True)
+        resumed_ctx = await runtime.resume_task_approval(
+            task_id="task-fail-approval",
+            approved=True,
+            approval_token=ctx.pending_approval["approval_token"],
+        )
 
         assert resumed_ctx.status == "failed"
         assert "Access denied" in resumed_ctx.final_result

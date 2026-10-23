@@ -31,7 +31,6 @@ ToolName = Literal[
     "browser_search",
     "browser_open_url",
     "browser_play_youtube",
-    "shell_run_command",
 ]
 
 

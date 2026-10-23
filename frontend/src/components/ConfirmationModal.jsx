@@ -1,61 +1,53 @@
-import React from 'react'
-import { AlertTriangle, ShieldAlert, Check, X } from 'lucide-react'
+import React, { useState } from 'react'
+import { Check, ChevronDown, ChevronUp, FolderPlus, ShieldCheck, X } from 'lucide-react'
+
+function describeAction(request) {
+  const path = request.parameters?.path || request.parameters?.dst
+  if (request.tool === 'fs_make_dir') return `Create the folder “${path?.split(/[\\/]/).pop() || 'New Folder'}”${path ? ` in ${path.replace(/[\\/][^\\/]+$/, '')}` : ''}?`
+  if (request.tool === 'fs_delete_file') return `Delete “${path?.split(/[\\/]/).pop() || 'this item'}”?`
+  return request.description || 'Allow Smart Manager to make this change?'
+}
 
 export default function ConfirmationModal({ request, onApprove, onReject }) {
   if (!request) return null
+  const [showDetails, setShowDetails] = useState(false)
 
   return (
     <div className="modal-overlay">
-      <div className="confirmation-modal">
-        <div className="modal-header warning">
-          <div className="modal-icon-wrap warning">
-            <AlertTriangle size={24} />
+      <section className="confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="approval-title">
+        <div className="approval-hero">
+          <div className="modal-icon-wrap approval">
+            <FolderPlus size={22} />
           </div>
           <div className="modal-title-wrap">
-            <h3 className="modal-title">Action Approval Required</h3>
-            <span className="risk-level-badge risk-high">
-              {request.risk_level || 'HIGH RISK'}
-            </span>
+            <p className="eyebrow">Approval needed</p>
+            <h3 className="modal-title" id="approval-title">Review this change</h3>
           </div>
         </div>
 
         <div className="modal-body">
-          <p className="modal-description">
-            The agent proposes to execute an action that modifies your system:
-          </p>
-          <div className="action-details-card">
-            <div className="detail-row">
-              <span className="detail-label">Action:</span>
-              <span className="detail-value tool-tag">{request.tool}</span>
-            </div>
-            <div className="detail-row">
-              <span className="detail-label">Description:</span>
-              <span className="detail-value">{request.description || 'No description provided'}</span>
-            </div>
-            <div className="detail-row parameters">
-              <span className="detail-label">Parameters:</span>
-              <div className="params-code-block">
-                <pre>{JSON.stringify(request.parameters, null, 2)}</pre>
-              </div>
-            </div>
+          <p className="approval-question">{describeAction(request)}</p>
+          <div className="approval-notice">
+            <ShieldCheck size={17} />
+            <span>No changes have been made yet.</span>
           </div>
-          <div className="modal-warning-notice">
-            <ShieldAlert size={16} />
-            <span>Review parameters carefully before authorizing execution.</span>
-          </div>
+          <button className="technical-details-toggle" type="button" onClick={() => setShowDetails(!showDetails)} aria-expanded={showDetails}>
+            Technical details {showDetails ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </button>
+          {showDetails && <pre className="approval-details">{JSON.stringify({ action: request.tool, parameters: request.parameters }, null, 2)}</pre>}
         </div>
 
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={onReject}>
             <X size={16} />
-            <span>Deny & Cancel</span>
+            <span>Cancel</span>
           </button>
-          <button className="btn btn-danger" onClick={onApprove}>
+          <button className="btn btn-primary" onClick={onApprove}>
             <Check size={16} />
-            <span>Authorize Action</span>
+            <span>{request.tool === 'fs_make_dir' ? 'Create folder' : 'Approve change'}</span>
           </button>
         </div>
-      </div>
+      </section>
     </div>
   )
 }

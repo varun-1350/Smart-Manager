@@ -23,6 +23,15 @@ function getActionIcon(toolName) {
   return <Play size={14} className="action-type-icon default" />
 }
 
+function actionLabel(toolName) {
+  const labels = {
+    fs_make_dir: 'Create folder', fs_write_text_file: 'Create text file',
+    fs_delete_file: 'Delete item', fs_copy_file: 'Copy item', fs_move_file: 'Move item',
+    fs_rename_file: 'Rename item', proc_launch: 'Open application', proc_kill: 'Close application',
+  }
+  return labels[toolName] || 'System action'
+}
+
 function CopyButton({ text, label = 'Copy', className = '' }) {
   const [copied, setCopied] = useState(false)
 
@@ -52,7 +61,7 @@ function CopyButton({ text, label = 'Copy', className = '' }) {
 
 export default function MessageBubble({ message }) {
   const isUser = message.role === 'user'
-  const [showDetails, setShowDetails] = useState(true)
+  const [showDetails, setShowDetails] = useState(false)
 
   // Extract clean plain text for the clipboard copy action
   const getCopyableContent = () => {
@@ -98,7 +107,7 @@ export default function MessageBubble({ message }) {
             <div className="plan-header" onClick={() => setShowDetails(!showDetails)}>
               <span className="plan-title">
                 {showDetails ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                Execution Plan ({message.actions?.length || 0} actions)
+                Planned action{message.actions?.length === 1 ? '' : 's'} ({message.actions?.length || 0})
               </span>
               <span className="plan-status-badge">{message.status || 'in_progress'}</span>
             </div>
@@ -124,7 +133,7 @@ export default function MessageBubble({ message }) {
                 <div className="timeline-content">
                   <div className="timeline-title-row">
                     {getActionIcon(act.tool)}
-                    <span className="action-tool-name">{act.tool}</span>
+                    <span className="action-tool-name">{actionLabel(act.tool)}</span>
                     <span className="action-time">{act.duration_ms ? `${act.duration_ms}ms` : ''}</span>
                   </div>
                   {act.summary && <div className="action-desc">{act.summary}</div>}
@@ -141,7 +150,7 @@ export default function MessageBubble({ message }) {
                       <pre>{typeof act.result === 'object' ? JSON.stringify(act.result, null, 2) : act.result}</pre>
                     </div>
                   )}
-                  {act.error && <div className="action-error-box">{act.error}</div>}
+                  {act.error && !act.error.includes('WAITING_APPROVAL') && <div className="action-error-box">{act.error}</div>}
                 </div>
               </div>
             ))}

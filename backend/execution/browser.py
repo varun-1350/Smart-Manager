@@ -1,5 +1,6 @@
 import urllib.parse
 import webbrowser
+from urllib.parse import urlparse
 from typing import Dict, Any
 
 
@@ -19,8 +20,12 @@ class BrowserOperations:
     @staticmethod
     def open_url(url: str) -> Dict[str, Any]:
         cleaned = url.strip()
-        if not cleaned.startswith(("http://", "https://")):
+        parsed = urlparse(cleaned)
+        if not parsed.scheme and cleaned and "://" not in cleaned:
             cleaned = "https://" + cleaned
+            parsed = urlparse(cleaned)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("Only absolute HTTP(S) URLs can be opened.")
 
         webbrowser.open(cleaned)
         return {

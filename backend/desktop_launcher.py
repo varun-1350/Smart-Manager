@@ -1,4 +1,5 @@
 import os
+import secrets
 import sys
 import threading
 import time
@@ -26,13 +27,16 @@ def run_backend_server():
     )
 
 
-def wait_for_backend(timeout: float = 10.0) -> bool:
+def wait_for_backend(timeout: float = 10.0, session_secret: str | None = None) -> bool:
     """Waits for the local backend to be healthy before opening the window."""
     start = time.time()
     url = f"http://{settings.smart_manager_host}:{settings.smart_manager_port}/api/health"
+    headers = {"X-Smart-Manager-Session": session_secret} if session_secret else None
     while time.time() - start < timeout:
         try:
-            res = httpx.get(url, timeout=1.0)
+            # Packaged mode authenticates every loopback API request, including
+            # this launcher readiness probe.
+            res = httpx.get(url, timeout=1.0, headers=headers)
             if res.status_code == 200:
                 return True
         except Exception:
@@ -46,12 +50,18 @@ def main():
     print("      Starting Smart Manager Windows Desktop Agent       ")
     print("=========================================================")
 
+    # The embedded UI receives this one-time token in its private launch URL;
+    # the backend rejects unauthenticated loopback API calls.
+    session_secret = secrets.token_urlsafe(32)
+    os.environ["API_SESSION_SECRET"] = session_secret
+    settings.api_session_secret = session_secret
+
     # 1. Start backend in background thread
     server_thread = threading.Thread(target=run_backend_server, daemon=True)
     server_thread.start()
 
     # 2. Verify backend availability
-    if not wait_for_backend():
+    if not wait_for_backend(session_secret=session_secret):
         print("ERROR: Backend failed to start within timeout.")
         sys.exit(1)
 
@@ -59,13 +69,13 @@ def main():
 
     # 3. Determine frontend URL
     # By default, use the local backend which serves the built frontend directly
-    window_url = f"http://{settings.smart_manager_host}:{settings.smart_manager_port}"
+    window_url = f"http://{settings.smart_manager_host}:{settings.smart_manager_port}/?sm_session={session_secret}"
 
     # If developer explicitly started Vite dev server on 5173, use it for HMR
     try:
         res = httpx.get("http://127.0.0.1:5173", timeout=0.3)
         if res.status_code == 200:
-            window_url = "http://127.0.0.1:5173"
+            window_url = f"http://127.0.0.1:5173/?sm_session={session_secret}"
     except Exception:
         pass
 

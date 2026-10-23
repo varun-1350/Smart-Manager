@@ -6,7 +6,6 @@ from security.permissions import SecurityPolicy, RiskLevel
 from execution.filesystem import FilesystemOperations
 from execution.processes import ProcessOperations
 from execution.browser import BrowserOperations
-from execution.shell import ShellOperations
 
 
 class ActionDispatcher:
@@ -138,12 +137,6 @@ class ActionDispatcher:
             elif tool == "browser_play_youtube":
                 raw_result = BrowserOperations.play_youtube(parameters["query"])
 
-            # Shell Operations
-            elif tool == "shell_run_command":
-                raw_result = ShellOperations.run_command(
-                    command=parameters["command"],
-                    timeout_seconds=parameters.get("timeout_seconds", 15),
-                )
             else:
                 success = False
                 error_msg = f"No handler registered for tool '{tool}'"

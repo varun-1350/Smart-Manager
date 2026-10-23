@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import secrets
 from typing import Optional, Dict, Any, Callable, Awaitable
 from agent.context import TaskContext, ActionObservation
 from agent.model import OllamaClient, AgentStepDecision
@@ -36,6 +37,13 @@ class AgentRuntime:
             return True
         return False
 
+    def _retire_context(self, ctx: TaskContext) -> None:
+        """Release retained state once a task can no longer be resumed."""
+        if ctx.status != "waiting_approval":
+            self.active_contexts.pop(ctx.task_id, None)
+            if self.provider_manager:
+                self.provider_manager.register_task_end(ctx.task_id)
+
     async def run_task(
         self,
         task_id: str,
@@ -44,6 +52,8 @@ class AgentRuntime:
         max_iterations: Optional[int] = None,
         on_step_update: Optional[Callable[[TaskContext, Dict[str, Any]], Awaitable[None]]] = None,
     ) -> TaskContext:
+        if task_id in self.active_contexts:
+            raise ValueError("A task with this identifier is already active.")
         ctx = TaskContext(
             task_id=task_id,
             conversation_id=conversation_id,
@@ -62,7 +72,7 @@ class AgentRuntime:
                 ctx.status = "failed"
                 ctx.error = f"AI Provider Error: {str(e)}"
                 ctx.final_result = ctx.error
-                self.provider_manager.register_task_end(task_id)
+                self._retire_context(ctx)
                 return ctx
         elif hasattr(self.client, "model"):
             ctx.provider = f"local:{self.client.model}"
@@ -77,9 +87,18 @@ class AgentRuntime:
                     return ctx
 
                 # 1. PLAN: Determine the next step using model reasoning
+                if self.provider_manager and not self.provider_manager.provider_available_for_task(ctx.provider or "unknown"):
+                    ctx.status = "failed"
+                    ctx.error = "AI provider is temporarily unavailable after repeated failures. Please retry shortly."
+                    ctx.final_result = ctx.error
+                    return ctx
                 try:
                     decision = await self.planner.plan_step(ctx)
+                    if self.provider_manager:
+                        self.provider_manager.record_provider_success(ctx.provider or "unknown")
                 except Exception as e:
+                    if self.provider_manager:
+                        self.provider_manager.record_provider_failure(ctx.provider or "unknown")
                     ctx.status = "failed"
                     ctx.error = f"Planning failed: {str(e)}"
                     if on_step_update:
@@ -112,6 +131,8 @@ class AgentRuntime:
                 batch_succeeded = True
                 for act in decision.actions:
                     # Execute action through ActionDispatcher
+                    # Dispatch only bounded operations; the action layer caps result
+                    # sizes and all potentially destructive work is paused for approval.
                     observation = ActionDispatcher.execute(
                         tool=act.tool,
                         parameters=act.parameters,
@@ -130,6 +151,7 @@ class AgentRuntime:
                             "description": act.reasoning,
                             "reason": observation.error,
                             "risk_level": observation.verification_notes or "high",
+                            "approval_token": secrets.token_urlsafe(32),
                         }
                         if on_step_update:
                             await on_step_update(ctx, {"event": "waiting_approval", "approval": ctx.pending_approval})
@@ -171,8 +193,7 @@ class AgentRuntime:
                 ctx.error = f"Task reached maximum iteration limit ({ctx.max_iterations}) without verifying goal completion."
                 ctx.final_result = "Task exceeded iteration limit. Some actions may have been completed, but final verification could not be established."
         finally:
-            if self.provider_manager:
-                self.provider_manager.register_task_end(task_id)
+            self._retire_context(ctx)
             self.stop_requested.discard(task_id)
 
         return ctx
@@ -181,6 +202,7 @@ class AgentRuntime:
         self,
         task_id: str,
         approved: bool,
+        approval_token: Optional[str] = None,
         on_step_update: Optional[Callable[[TaskContext, Dict[str, Any]], Awaitable[None]]] = None,
     ) -> TaskContext:
         ctx = self.active_contexts.get(task_id)
@@ -188,6 +210,9 @@ class AgentRuntime:
             raise KeyError(f"No pending approval found for task {task_id}")
 
         pending = ctx.pending_approval
+        expected_token = pending.get("approval_token")
+        if not expected_token or not approval_token or not secrets.compare_digest(expected_token, approval_token):
+            raise PermissionError("Approval request is invalid or has expired.")
         ctx.pending_approval = None
 
         if not approved:
@@ -202,6 +227,7 @@ class AgentRuntime:
             ctx.record_observation(obs)
             ctx.status = "cancelled"
             ctx.final_result = "Action cancelled at your request."
+            self._retire_context(ctx)
             return ctx
         else:
             # User approved: execute with pre-approval granted
@@ -222,12 +248,22 @@ class AgentRuntime:
                 ctx.final_result = f"The approved action could not be completed: {ctx.error}"
                 if on_step_update:
                     await on_step_update(ctx, {"event": "action_failed", "observation": obs.model_dump()})
+                self._retire_context(ctx)
                 return ctx
 
             ctx.status = "running"
 
         # Resume the agent loop
-        return await self._continue_task(ctx, on_step_update)
+        try:
+            result = await self._continue_task(ctx, on_step_update)
+        except Exception as exc:
+            logger.exception("Task approval continuation failed")
+            ctx.status = "failed"
+            ctx.error = "Planning failed after approval."
+            ctx.final_result = ctx.error
+            result = ctx
+        self._retire_context(result)
+        return result
 
     async def _continue_task(
         self,
@@ -235,7 +271,19 @@ class AgentRuntime:
         on_step_update: Optional[Callable[[TaskContext, Dict[str, Any]], Awaitable[None]]] = None,
     ) -> TaskContext:
         while not ctx.is_bounded():
-            decision = await self.planner.plan_step(ctx)
+            if self.provider_manager and not self.provider_manager.provider_available_for_task(ctx.provider or "unknown"):
+                ctx.status = "failed"
+                ctx.error = "AI provider is temporarily unavailable after repeated failures. Please retry shortly."
+                ctx.final_result = ctx.error
+                return ctx
+            try:
+                decision = await self.planner.plan_step(ctx)
+                if self.provider_manager:
+                    self.provider_manager.record_provider_success(ctx.provider or "unknown")
+            except Exception:
+                if self.provider_manager:
+                    self.provider_manager.record_provider_failure(ctx.provider or "unknown")
+                raise
             step_record = ctx.add_step(
                 thought_summary=decision.summary,
                 proposed_actions=decision.actions,
@@ -259,6 +307,8 @@ class AgentRuntime:
                         "parameters": act.parameters,
                         "description": act.reasoning,
                         "reason": obs.error,
+                        "risk_level": obs.verification_notes or "high",
+                        "approval_token": secrets.token_urlsafe(32),
                     }
                     return ctx
 

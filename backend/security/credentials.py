@@ -1,7 +1,7 @@
 import os
 import json
-import base64
 import sys
+import tempfile
 from pathlib import Path
 from typing import Optional, Dict
 
@@ -48,8 +48,9 @@ class CredentialVault:
             except Exception:
                 pass
 
-        # Fallback for non-Windows test environments
-        return base64.b64encode(plaintext)
+        # This desktop application handles API keys and must not silently
+        # downgrade to reversible Base64 "encryption" on an unsupported host.
+        raise RuntimeError("Credential storage requires Windows DPAPI.")
 
     @classmethod
     def _decrypt_bytes(cls, ciphertext: bytes) -> bytes:
@@ -78,11 +79,7 @@ class CredentialVault:
             except Exception:
                 pass
 
-        # Fallback for non-Windows test environments
-        try:
-            return base64.b64decode(ciphertext)
-        except Exception:
-            return b""
+        raise RuntimeError("Credential storage requires Windows DPAPI.")
 
     @classmethod
     def _load_vault(cls) -> Dict[str, str]:
@@ -102,7 +99,17 @@ class CredentialVault:
         settings.data_dir.mkdir(parents=True, exist_ok=True)
         raw_json = json.dumps(data).encode("utf-8")
         encrypted = cls._encrypt_bytes(raw_json)
-        CREDENTIALS_FILE.write_bytes(encrypted)
+        # Atomic replacement avoids leaving a partial or plaintext vault after a
+        # process crash. Restrictive mode protects the file on POSIX test hosts.
+        with tempfile.NamedTemporaryFile(dir=settings.data_dir, delete=False) as tmp:
+            tmp.write(encrypted)
+            temp_path = Path(tmp.name)
+        try:
+            os.chmod(temp_path, 0o600)
+            os.replace(temp_path, CREDENTIALS_FILE)
+        finally:
+            if temp_path.exists():
+                temp_path.unlink(missing_ok=True)
 
     @classmethod
     def set_secret(cls, key: str, value: str) -> None:

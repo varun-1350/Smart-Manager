@@ -109,10 +109,10 @@ export default function Sidebar({
               disabled={isUnloading}
               title="Purge model from memory to free ~3 GB RAM immediately"
             >
-              <span>{isUnloading ? 'Freeing...' : 'Free 3GB RAM'}</span>
+              <span>{isUnloading ? 'Releasing…' : 'Release memory'}</span>
             </button>
           </div>
-          <div className="ram-subtext">Auto-unload active for minimal memory</div>
+          <div className="ram-subtext">Model memory releases automatically after tasks.</div>
         </div>
 
         {/* Model Status Card */}

@@ -12,6 +12,7 @@ from ai.ollama_provider import OllamaProvider
 from ai.online_provider import OnlineProvider
 from security.credentials import CredentialVault
 from storage.database import SettingsRepository
+from ai.circuit_breaker import CircuitBreaker
 
 logger = logging.getLogger("smart_manager.ai")
 T = TypeVar("T")
@@ -63,6 +64,7 @@ class ProviderManager:
         # Active downloads tracker
         self._active_downloads: Dict[str, Dict[str, Any]] = {}
         self._active_tasks: set = set()
+        self._circuits: Dict[str, CircuitBreaker] = {}
 
     @property
     def mode(self) -> str:
@@ -108,6 +110,15 @@ class ProviderManager:
 
     def has_active_tasks(self) -> bool:
         return len(self._active_tasks) > 0
+
+    def provider_available_for_task(self, provider_label: str) -> bool:
+        return self._circuits.setdefault(provider_label, CircuitBreaker()).allow_request()
+
+    def record_provider_success(self, provider_label: str) -> None:
+        self._circuits.setdefault(provider_label, CircuitBreaker()).record_success()
+
+    def record_provider_failure(self, provider_label: str) -> None:
+        self._circuits.setdefault(provider_label, CircuitBreaker()).record_failure()
 
     # ================= UNIFIED MODEL LIST & MANAGEMENT =================
 
@@ -189,11 +200,13 @@ class ProviderManager:
         clean_name = model_name.strip()
         if not clean_name:
             raise ValueError("Model name cannot be empty.")
+        if len(clean_name) > 255 or not SAFE_MODEL_NAME_REGEX.match(clean_name):
+            raise ValueError("Model name contains unsupported characters.")
         if not api_key or not api_key.strip():
             raise ValueError("API key is required for online models.")
 
         preset = PROVIDER_PRESETS.get(prov_key, PROVIDER_PRESETS["custom"])
-        final_base_url = (base_url.strip() if base_url and base_url.strip() else preset["default_base_url"]).rstrip("/")
+        final_base_url = OnlineProvider._validate_base_url(base_url.strip() if base_url and base_url.strip() else preset["default_base_url"])
         if not final_base_url:
             raise ValueError(f"Base URL is required for provider '{prov_key}'.")
 

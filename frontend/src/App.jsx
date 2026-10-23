@@ -55,6 +55,8 @@ export default function App() {
 
   const activeConv =
     conversations.find((c) => c.id === activeId) || conversations[0]
+  const isAwaitingApproval = Boolean(pendingApproval)
+  const isBusy = isLoading && !isAwaitingApproval
 
   useEffect(() => {
     refreshHealth()
@@ -177,7 +179,7 @@ export default function App() {
   }
 
   const handleStopTask = async () => {
-    if (!isLoading) return
+    if (!isBusy) return
 
     const taskId = activeTaskIdRef.current
     if (abortControllerRef.current) {
@@ -218,7 +220,7 @@ export default function App() {
 
   const handleSendPrompt = async (textToSend) => {
     const prompt = (textToSend || inputPrompt).trim()
-    if (!prompt || isLoading) return
+    if (!prompt || isBusy || isAwaitingApproval) return
 
     setInputPrompt('')
     setIsLoading(true)
@@ -330,13 +332,13 @@ export default function App() {
   }
 
   const handleApproval = async (approved) => {
-    if (!pendingApproval || isLoading) return
+    if (!pendingApproval) return
 
     const approval = pendingApproval
     setIsLoading(true)
     setPendingApproval(null)
     try {
-      const result = await approveTaskApi(approval.task_id, approved)
+      const result = await approveTaskApi(approval.task_id, approved, approval.approval_token)
       const agentMsg = {
         id: `msg-${Date.now()}`,
         role: 'agent',
@@ -398,17 +400,6 @@ export default function App() {
           </div>
 
           <div className="header-actions-group">
-            {/* Quick RAM Minimizer Button */}
-            <button
-              className="quick-ram-btn"
-              onClick={handleUnloadModel}
-              disabled={isUnloading}
-              title="Release ~3GB RAM by unloading llama-server now"
-            >
-              <Zap size={13} className="ram-bolt" />
-              <span>{isUnloading ? 'Freeing...' : 'Free RAM'}</span>
-            </button>
-
             <div className="chat-header-model-pill">
               <span className="pulse-dot" />
               <span>
@@ -419,7 +410,7 @@ export default function App() {
         </header>
 
         {/* Shimmer progress line when executing */}
-        {isLoading && <div className="shimmer-progress-bar animate-shimmer" />}
+        {isBusy && <div className="shimmer-progress-bar animate-shimmer" />}
 
         <div className="messages-stream-container">
           {activeConv?.messages.length === 0 ? (
@@ -481,7 +472,7 @@ export default function App() {
           )}
 
           {/* Running State Card with Micro-Animations */}
-          {isLoading && (
+          {isBusy && (
             <div className="thinking-card-wrapper animate-slide-up">
               <div className="thinking-card">
                 <div className="thinking-spinner-ring">
@@ -489,10 +480,10 @@ export default function App() {
                 </div>
                 <div className="thinking-text-group">
                   <div className="thinking-heading">
-                    Smart Manager is executing your task...
+                    Working on your task…
                   </div>
                   <div className="thinking-subheading">
-                    Reasoning, dispatching OS tools, and validating outcome
+                    Planning, acting, and checking the result
                   </div>
                 </div>
                 <button
@@ -518,12 +509,14 @@ export default function App() {
               value={inputPrompt}
               onChange={(e) => setInputPrompt(e.target.value)}
               onKeyDown={handleKeyDown}
+              disabled={isAwaitingApproval}
+              aria-label="Describe a Windows task"
               rows={1}
             />
 
             <div className="input-button-group">
               {/* Animated Stop Button when active */}
-              {isLoading ? (
+              {isBusy ? (
                 <button
                   className="chat-stop-btn animate-pulse-glow"
                   onClick={handleStopTask}
@@ -536,7 +529,7 @@ export default function App() {
                 <button
                   className="chat-send-btn hover-scale"
                   onClick={() => handleSendPrompt()}
-                  disabled={!inputPrompt.trim()}
+                  disabled={!inputPrompt.trim() || isAwaitingApproval}
                   title="Send Prompt (Enter)"
                 >
                   <Send size={18} />

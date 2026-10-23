@@ -1,16 +1,21 @@
 import logging
+import sqlite3
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 import httpx
 import sys
-from fastapi import FastAPI, HTTPException
+import secrets
+from uuid import uuid4
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from config import settings
 from storage.database import init_db, SettingsRepository
 from storage.history import HistoryRepository
+from storage.tasks import TaskRepository
 from security.credentials import CredentialVault
 from ai import ProviderManager, OllamaProvider, OnlineProvider
 from agent.model import OllamaClient
@@ -35,13 +40,16 @@ app.add_middleware(
         "tauri://localhost",
         "http://tauri.localhost",
     ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "DELETE"],
+    allow_headers=["Content-Type", "X-Smart-Manager-Session"],
 )
 
 # Initialize database schema
 init_db()
+interrupted_task_count = TaskRepository.reconcile_interrupted()
+if interrupted_task_count:
+    logger.warning("Marked %s unfinished task(s) interrupted after backend restart", interrupted_task_count)
 
 # Persistent model selection restoration
 persisted_local_model = SettingsRepository.get("selected_local_model", settings.ollama_model)
@@ -59,6 +67,17 @@ provider_manager = ProviderManager(ollama_provider=ollama_provider)
 runtime = AgentRuntime(client=ollama_client, provider_manager=provider_manager)
 
 
+@app.middleware("http")
+async def require_desktop_session(request: Request, call_next):
+    """Require the per-launch desktop secret when packaged mode configures one."""
+    expected = settings.api_session_secret
+    if expected and request.url.path.startswith("/api/"):
+        supplied = request.headers.get("X-Smart-Manager-Session", "")
+        if not secrets.compare_digest(supplied, expected):
+            return JSONResponse(status_code=401, content={"detail": "Desktop session authentication required."})
+    return await call_next(request)
+
+
 class HealthResponse(BaseModel):
     status: str
     version: str
@@ -71,12 +90,13 @@ class HealthResponse(BaseModel):
 
 
 class ConfigUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     ollama_model: Optional[str] = None
-    max_iterations: Optional[int] = None
+    max_iterations: Optional[int] = Field(default=None, ge=1, le=100)
     confirmation_required: Optional[bool] = None
-    num_ctx: Optional[int] = None
-    num_predict: Optional[int] = None
-    keep_alive: Optional[str] = None
+    num_ctx: Optional[int] = Field(default=None, ge=256, le=131_072)
+    num_predict: Optional[int] = Field(default=None, ge=1, le=16_384)
+    keep_alive: Optional[str] = Field(default=None, min_length=1, max_length=32)
     auto_unload: Optional[bool] = None
 
 
@@ -125,22 +145,26 @@ async def get_config() -> Dict[str, Any]:
 
 @app.post("/api/config")
 async def update_config(req: ConfigUpdateRequest) -> Dict[str, Any]:
-    if req.ollama_model:
-        ollama_client.model = req.ollama_model
-        settings.ollama_model = req.ollama_model
-    if req.max_iterations:
+    if req.ollama_model is not None:
+        model = req.ollama_model.strip()
+        if not model:
+            raise HTTPException(status_code=422, detail="Model name cannot be empty.")
+        ollama_client.model = model
+        settings.ollama_model = model
+        SettingsRepository.set("selected_local_model", model)
+    if req.max_iterations is not None:
         settings.agent_max_iterations = req.max_iterations
     if req.confirmation_required is not None:
         settings.agent_default_confirmation_required = req.confirmation_required
-    if req.num_ctx:
+    if req.num_ctx is not None:
         ollama_client.num_ctx = req.num_ctx
         settings.ollama_num_ctx = req.num_ctx
-    if req.num_predict:
+    if req.num_predict is not None:
         ollama_client.num_predict = req.num_predict
         settings.ollama_num_predict = req.num_predict
-    if req.keep_alive:
-        ollama_client.keep_alive = req.keep_alive
-        settings.ollama_keep_alive = req.keep_alive
+    if req.keep_alive is not None:
+        ollama_client.keep_alive = req.keep_alive.strip()
+        settings.ollama_keep_alive = req.keep_alive.strip()
     if req.auto_unload is not None:
         settings.ollama_auto_unload = req.auto_unload
 
@@ -385,6 +409,14 @@ async def get_messages(conv_id: str):
     return HistoryRepository.get_messages(conv_id)
 
 
+@app.get("/api/tasks/{task_id}")
+async def get_task_status(task_id: str):
+    task = TaskRepository.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {"task": task, "events": TaskRepository.events(task_id)}
+
+
 @app.delete("/api/conversations/{conv_id}")
 async def delete_conversation(conv_id: str):
     deleted = HistoryRepository.delete_conversation(conv_id)
@@ -409,19 +441,23 @@ class PingPromptResponse(BaseModel):
 
 
 class TaskExecuteRequest(BaseModel):
-    task_id: str
-    prompt: str
-    conversation_id: str = "default"
+    model_config = ConfigDict(extra="forbid")
+    task_id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
+    prompt: str = Field(min_length=1, max_length=20_000)
+    conversation_id: str = Field(default="default", min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
 
 
 class TaskApprovalRequest(BaseModel):
-    task_id: str
+    model_config = ConfigDict(extra="forbid")
+    task_id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
     approved: bool
+    approval_token: str = Field(min_length=32, max_length=256)
 
 
 @app.post("/api/task/execute")
 async def execute_task(req: TaskExecuteRequest):
     try:
+        TaskRepository.create(req.task_id, req.conversation_id, req.prompt)
         # Record user message in local history
         HistoryRepository.create_or_update_conversation(
             req.conversation_id,
@@ -435,6 +471,7 @@ async def execute_task(req: TaskExecuteRequest):
         )
 
         # Run autonomous agent loop
+        TaskRepository.transition(req.task_id, "planning")
         context = await runtime.run_task(
             task_id=req.task_id,
             goal=req.prompt,
@@ -457,6 +494,7 @@ async def execute_task(req: TaskExecuteRequest):
                     duration_ms=obs.duration_ms,
                     verified=obs.verified,
                 )
+                TaskRepository.record_action(req.task_id, obs.model_dump())
 
         final_response = (
             context.final_result
@@ -477,6 +515,16 @@ async def execute_task(req: TaskExecuteRequest):
             status=context.status,
         )
 
+        ledger_status = "awaiting_approval" if context.status == "waiting_approval" else context.status
+        TaskRepository.transition(
+            context.task_id,
+            ledger_status,
+            provider=context.provider,
+            result=context.final_result,
+            error=context.error,
+            event_payload={"iterations": context.iteration},
+        )
+
         plan_summary = (
             context.history[-1].thought_summary
             if context.history
@@ -494,6 +542,8 @@ async def execute_task(req: TaskExecuteRequest):
             "provider": context.provider or f"local:{provider_manager.local_provider.model_name}",
         }
 
+    except sqlite3.IntegrityError:
+        raise HTTPException(status_code=409, detail="Task identifier already exists.")
     except Exception as e:
         logger.exception("Error executing task")
         raise HTTPException(status_code=500, detail=str(e))
@@ -507,7 +557,8 @@ async def execute_task(req: TaskExecuteRequest):
 
 
 class TaskStopRequest(BaseModel):
-    task_id: str
+    model_config = ConfigDict(extra="forbid")
+    task_id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
 
 
 @app.post("/api/task/stop")
@@ -518,6 +569,8 @@ async def stop_task(req: TaskStopRequest):
         await provider_manager.local_provider.unload()
     except Exception:
         pass
+    if stopped:
+        TaskRepository.transition(req.task_id, "cancelled", event_payload={"reason": "user_stop"})
     return {"success": True, "task_id": req.task_id, "stopped": stopped}
 
 
@@ -527,6 +580,7 @@ async def approve_task(req: TaskApprovalRequest):
         context = await runtime.resume_task_approval(
             task_id=req.task_id,
             approved=req.approved,
+            approval_token=req.approval_token,
         )
 
         all_actions = []
@@ -542,7 +596,7 @@ async def approve_task(req: TaskApprovalRequest):
                 obs
                 for step in reversed(context.history)
                 for obs in reversed(step.observations)
-                if obs.tool in {"fs_delete_file", "proc_kill", "shell_run_command"}
+                if obs.tool in {"fs_delete_file", "proc_kill", "fs_write_text_file", "fs_copy_file", "fs_move_file", "fs_rename_file", "fs_make_dir", "proc_launch"}
                 and "WAITING_APPROVAL" not in (obs.error or "")
             ),
             None,
@@ -559,11 +613,30 @@ async def approve_task(req: TaskApprovalRequest):
                 duration_ms=approved_observation.duration_ms,
                 verified=approved_observation.verified,
             )
+            TaskRepository.record_action(context.task_id, approved_observation.model_dump())
 
         final_response = context.final_result or context.error or (
             "Approved action completed and was verified."
             if approved_observation and approved_observation.success and approved_observation.verified
             else "Approved action processed."
+        )
+
+        # Approval responses are separate agent turns. Persist them so a reload
+        # does not erase the outcome of a destructive action.
+        HistoryRepository.save_message(
+            msg_id=f"agent-approval-{uuid4()}",
+            conversation_id=context.conversation_id,
+            role="agent",
+            content=final_response,
+            status=context.status,
+        )
+        ledger_status = "awaiting_approval" if context.status == "waiting_approval" else context.status
+        TaskRepository.transition(
+            context.task_id,
+            ledger_status,
+            provider=context.provider,
+            result=context.final_result,
+            error=context.error,
         )
 
         return {

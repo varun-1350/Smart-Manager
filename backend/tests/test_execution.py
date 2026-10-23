@@ -28,6 +28,7 @@ def test_filesystem_operations(tmp_path: Path):
     # 4. Search files
     search_res = FilesystemOperations.search_files(str(tmp_path), pattern="hello.txt")
     assert search_res["total_found"] == 1
+    assert search_res["truncated"] is False
     assert search_res["results"][0]["name"] == "hello.txt"
 
     # 5. Copy file
@@ -107,6 +108,7 @@ def test_action_dispatcher_writes_new_text_file_without_shell(tmp_path: Path):
     obs = ActionDispatcher.execute(
         tool="fs_write_text_file",
         parameters={"path": str(target), "content": "Hii i am varun"},
+        is_pre_approved=True,
     )
 
     assert obs.success is True

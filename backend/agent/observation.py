@@ -4,6 +4,7 @@ from typing import Dict, Any
 import psutil
 
 from agent.context import ActionObservation
+from execution.filesystem import resolve_system_path
 
 
 class ObservationVerifier:
@@ -25,7 +26,7 @@ class ObservationVerifier:
         try:
             # 1. Directory creation
             if tool == "fs_make_dir":
-                target_path = Path(parameters.get("path", ""))
+                target_path = resolve_system_path(parameters.get("path"))
                 if target_path.exists() and target_path.is_dir():
                     obs.verified = True
                     obs.verification_notes = f"Verified: Directory {target_path} exists."
@@ -35,7 +36,7 @@ class ObservationVerifier:
                     obs.error = f"Verification failed: Directory {target_path} was not created."
 
             elif tool == "fs_write_text_file":
-                target_path = Path(parameters.get("path", ""))
+                target_path = resolve_system_path(parameters.get("path"))
                 expected_content = parameters.get("content", "")
                 if target_path.is_file() and target_path.read_text(encoding="utf-8") == expected_content:
                     obs.verified = True
@@ -46,7 +47,7 @@ class ObservationVerifier:
 
             # 2. File deletion
             elif tool == "fs_delete_file":
-                target_path = Path(parameters.get("path", ""))
+                target_path = resolve_system_path(parameters.get("path"))
                 if not target_path.exists():
                     obs.verified = True
                     obs.verification_notes = f"Verified: Path {target_path} is no longer present."
@@ -57,8 +58,8 @@ class ObservationVerifier:
 
             # 3. File move
             elif tool == "fs_move_file":
-                src = Path(parameters.get("src", ""))
-                dst = Path(parameters.get("dst", ""))
+                src = resolve_system_path(parameters.get("src"))
+                dst = resolve_system_path(parameters.get("dst"))
                 if dst.exists() and not src.exists():
                     obs.verified = True
                     obs.verification_notes = f"Verified: Moved to {dst} and source removed."
@@ -68,7 +69,7 @@ class ObservationVerifier:
 
             # 4. File copy
             elif tool == "fs_copy_file":
-                dst = Path(parameters.get("dst", ""))
+                dst = resolve_system_path(parameters.get("dst"))
                 if dst.exists():
                     obs.verified = True
                     obs.verification_notes = f"Verified: Destination copy {dst} exists."

@@ -1,4 +1,5 @@
 import os
+from urllib.parse import urlparse
 from enum import Enum
 from pathlib import Path
 from typing import Dict, Any, Tuple, Optional, Set
@@ -39,9 +40,20 @@ class SecurityPolicy:
     # Actions that require explicit user confirmation
     APPROVAL_REQUIRED_TOOLS: Set[str] = {
         "fs_delete_file",
+        "fs_write_text_file",
+        "fs_copy_file",
+        "fs_move_file",
+        "fs_rename_file",
+        "fs_make_dir",
+        "proc_launch",
         "proc_kill",
-        "shell_run_command",
     }
+
+    MAX_PATH_LENGTH = 32_767
+
+    @classmethod
+    def _deny(cls, reason: str, risk: RiskLevel = RiskLevel.CRITICAL) -> ActionPermission:
+        return ActionPermission(allowed=False, risk_level=risk, requires_approval=False, reason=reason)
 
     @classmethod
     def evaluate_action(cls, tool: str, parameters: Dict[str, Any]) -> ActionPermission:
@@ -67,7 +79,6 @@ class SecurityPolicy:
             "browser_search",
             "browser_open_url",
             "browser_play_youtube",
-            "shell_run_command",
         }
 
         if tool not in known_tools:
@@ -78,10 +89,13 @@ class SecurityPolicy:
                 reason=f"Tool '{tool}' is not an approved Smart Manager capability.",
             )
 
-        # 2. Check filesystem path security
+        # 2. Check filesystem path security.  Resolve before comparing so aliases and
+        # symlinks cannot be used to reach protected locations.
         for key in ["path", "src", "dst", "directory"]:
             if key in parameters and isinstance(parameters[key], str):
                 path_val = parameters[key].strip()
+                if not path_val or len(path_val) > cls.MAX_PATH_LENGTH:
+                    return cls._deny("Path parameter is empty or exceeds the Windows path limit.", RiskLevel.HIGH)
                 # Check traversal attempts
                 if ".." in path_val:
                     return ActionPermission(
@@ -105,13 +119,19 @@ class SecurityPolicy:
                                     requires_approval=False,
                                     reason=f"Modifying protected operating system directory '{protected}' is strictly forbidden.",
                                 )
-                except Exception as e:
-                    return ActionPermission(
-                        allowed=False,
-                        risk_level=RiskLevel.HIGH,
-                        requires_approval=False,
-                        reason=f"Invalid path parameter: {e}",
-                    )
+                except (OSError, ValueError):
+                    return cls._deny("Invalid filesystem path parameter.", RiskLevel.HIGH)
+
+        if tool == "fs_rename_file":
+            name = parameters.get("new_name")
+            if not isinstance(name, str) or not name.strip() or len(name) > 255 or any(c in name for c in "\\\\/:") or name in {".", ".."}:
+                return cls._deny("New file name must be a single valid file name.", RiskLevel.HIGH)
+
+        if tool in {"browser_open_url"}:
+            url = parameters.get("url")
+            parsed = urlparse(url.strip() if isinstance(url, str) and "://" in url else f"https://{url.strip()}" if isinstance(url, str) else "")
+            if not isinstance(url, str) or any(char.isspace() for char in url) or parsed.scheme not in {"http", "https"} or not parsed.netloc:
+                return cls._deny("Only absolute HTTP(S) URLs may be opened.", RiskLevel.HIGH)
 
         # 3. High-risk destructive actions requiring approval
         if tool == "fs_delete_file":
@@ -128,24 +148,6 @@ class SecurityPolicy:
                 risk_level=RiskLevel.HIGH,
                 requires_approval=True,
                 reason="Terminating a running process may result in unsaved state or system interruption.",
-            )
-
-        if tool == "shell_run_command":
-            cmd = parameters.get("command", "")
-            # Ban destructive shell patterns
-            forbidden_patterns = ["rmdir /s", "del /f", "format ", "diskpart", "reg delete", "shutdown", "takeown"]
-            if any(p in cmd.lower() for p in forbidden_patterns):
-                return ActionPermission(
-                    allowed=False,
-                    risk_level=RiskLevel.CRITICAL,
-                    requires_approval=False,
-                    reason=f"Forbidden shell command detected: '{cmd}'",
-                )
-            return ActionPermission(
-                allowed=True,
-                risk_level=RiskLevel.HIGH,
-                requires_approval=True,
-                reason="Running shell commands requires explicit user authorization.",
             )
 
         # 4. Safe read-only tools
@@ -172,10 +174,11 @@ class SecurityPolicy:
                 reason="Read-only or launch query.",
             )
 
-        # 5. Low/moderate state-modifying actions (make_dir, copy, move)
+        # 5. All state-modifying actions require explicit confirmation.  This
+        # prevents a compromised model from silently changing user data.
         return ActionPermission(
             allowed=True,
             risk_level=RiskLevel.MODERATE,
-            requires_approval=False,
-            reason="State-modifying filesystem action.",
+            requires_approval=tool in cls.APPROVAL_REQUIRED_TOOLS,
+            reason="This action changes local machine state.",
         )

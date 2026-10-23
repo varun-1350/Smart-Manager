@@ -102,6 +102,9 @@ def resolve_system_path(path_str: Optional[str]) -> Path:
 
 
 class FilesystemOperations:
+    MAX_RESULTS = 200
+    MAX_TEXT_READ_CHARS = 1_000_000
+    MAX_SEARCH_ENTRIES = 20_000
     @staticmethod
     def list_dir(path: str) -> Dict[str, Any]:
         p = resolve_system_path(path)
@@ -158,17 +161,25 @@ class FilesystemOperations:
         max_results: int = 50,
     ) -> Dict[str, Any]:
         p = resolve_system_path(path)
+        max_results = max(1, min(int(max_results), FilesystemOperations.MAX_RESULTS))
         if not p.exists():
             raise FileNotFoundError(f"Search root path not found: {path}")
 
         matches = []
+        scanned_entries = 0
+        search_truncated = False
         pattern_lower = pattern.lower()
 
         # If pattern is a specific filename or wildcards
         search_pattern = f"**/{pattern}" if recursive else pattern
         try:
             for item in p.glob(search_pattern):
+                scanned_entries += 1
+                if scanned_entries > FilesystemOperations.MAX_SEARCH_ENTRIES:
+                    search_truncated = True
+                    break
                 if len(matches) >= max_results:
+                    search_truncated = True
                     break
                 try:
                     stat = item.stat()
@@ -185,13 +196,20 @@ class FilesystemOperations:
             # Fallback for complex searches
             for root, dirs, files in os.walk(p):
                 if len(matches) >= max_results:
+                    search_truncated = True
                     break
                 for f in files:
+                    scanned_entries += 1
+                    if scanned_entries > FilesystemOperations.MAX_SEARCH_ENTRIES:
+                        search_truncated = True
+                        break
                     if pattern_lower in f.lower() or glob.fnmatch.fnmatch(f.lower(), pattern_lower):
                         full = Path(root) / f
                         matches.append({"name": f, "path": str(full.resolve()), "is_dir": False})
                         if len(matches) >= max_results:
                             break
+                if search_truncated:
+                    break
 
         # If exact search returned no matches and pattern is specific, perform typo-tolerant fuzzy matching
         if not matches and pattern.strip("*"):
@@ -202,7 +220,12 @@ class FilesystemOperations:
                 candidate_items = p.rglob("*") if recursive else p.iterdir()
                 try:
                     for item in candidate_items:
+                        scanned_entries += 1
+                        if scanned_entries > FilesystemOperations.MAX_SEARCH_ENTRIES:
+                            search_truncated = True
+                            break
                         if len(matches) >= max_results:
+                            search_truncated = True
                             break
                         if target_ext and item.suffix.lower() != target_ext:
                             continue
@@ -241,6 +264,9 @@ class FilesystemOperations:
             "pattern": pattern,
             "total_found": len(matches),
             "results": matches,
+            # Avoid a pathological full-drive traversal when a model supplies
+            # a broad or misspelled pattern.
+            "truncated": search_truncated,
         }
 
     @staticmethod
@@ -276,10 +302,13 @@ class FilesystemOperations:
             raise FileNotFoundError(f"Source does not exist: {src}")
 
         if source.is_dir():
+            if destination == source or source in destination.parents:
+                raise ValueError("Cannot copy a directory into itself or one of its children.")
             shutil.copytree(source, destination, dirs_exist_ok=True)
         else:
             if destination.is_dir():
                 destination = destination / source.name
+            destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, destination)
 
         return {"copied": True, "source": str(source), "destination": str(destination)}
@@ -291,6 +320,9 @@ class FilesystemOperations:
         if not source.exists():
             raise FileNotFoundError(f"Source does not exist: {src}")
 
+        if source.is_dir() and (destination == source or source in destination.parents):
+            raise ValueError("Cannot move a directory into itself or one of its children.")
+        destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(source), str(destination))
         return {"moved": True, "source": str(source), "destination": str(destination)}
 
@@ -300,6 +332,8 @@ class FilesystemOperations:
         if not p.exists():
             raise FileNotFoundError(f"Path does not exist: {path}")
 
+        if not new_name or Path(new_name).name != new_name or new_name in {".", ".."}:
+            raise ValueError("New name must not contain a path separator.")
         new_path = p.parent / new_name
         p.rename(new_path)
         return {"renamed": True, "old_path": str(p), "new_path": str(new_path)}
@@ -335,6 +369,7 @@ class FilesystemOperations:
         if p.is_dir():
             raise IsADirectoryError(f"Cannot read text from a directory: {path}")
 
+        max_chars = max(1, min(int(max_chars), FilesystemOperations.MAX_TEXT_READ_CHARS))
         with open(p, "r", encoding="utf-8", errors="replace") as f:
             content = f.read(max_chars)
 

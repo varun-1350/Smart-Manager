@@ -251,4 +251,115 @@ export async function updateProviders(updates) {
   return await res.json()
 }
 
+// ============================================================================
+// File Explorer API Functions
+// ============================================================================
+
+export async function fetchLocations() {
+  const res = await apiFetch(`${API_BASE}/explorer/locations`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return await res.json()
+}
+
+export async function browseDirectory(path = null, sortBy = 'name', sortOrder = 'asc', showHidden = false, offset = 0, limit = 500) {
+  const params = new URLSearchParams()
+  if (path) params.set('path', path)
+  if (sortBy) params.set('sort_by', sortBy)
+  if (sortOrder) params.set('sort_order', sortOrder)
+  if (showHidden) params.set('show_hidden', 'true')
+  params.set('offset', String(offset))
+  params.set('limit', String(limit))
+
+  const res = await apiFetch(`${API_BASE}/explorer/browse?${params.toString()}`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.detail || `HTTP ${res.status}`)
+  }
+  return await res.json()
+}
+
+export async function fetchFilePreview(path) {
+  const res = await apiFetch(`${API_BASE}/explorer/preview?path=${encodeURIComponent(path)}`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.detail || `HTTP ${res.status}`)
+  }
+  return await res.json()
+}
+
+export async function executeExplorerAction(payload) {
+  const res = await apiFetch(`${API_BASE}/explorer/action`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.detail || `HTTP ${res.status}`)
+  }
+  return await res.json()
+}
+
+export async function fetchDuplicates(folder, minSize = 1024) {
+  const res = await apiFetch(`${API_BASE}/explorer/duplicates?folder=${encodeURIComponent(folder)}&min_size=${minSize}`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.detail || `HTTP ${res.status}`)
+  }
+  return await res.json()
+}
+
+export async function fetchStorageAnalysis(folder) {
+  const res = await apiFetch(`${API_BASE}/explorer/storage-analysis?folder=${encodeURIComponent(folder)}`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.detail || `HTTP ${res.status}`)
+  }
+  return await res.json()
+}
+
+export async function generateExplorerPlan(folderPath, instruction) {
+  const res = await apiFetch(`${API_BASE}/explorer/plan`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ folder_path: folderPath, instruction }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.detail || `HTTP ${res.status}`)
+  }
+  return await res.json()
+}
+
+export async function executeExplorerPlan(batchId, actions) {
+  const res = await apiFetch(`${API_BASE}/explorer/execute-plan`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ batch_id: batchId, actions }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.detail || `HTTP ${res.status}`)
+  }
+  return await res.json()
+}
+
+export async function undoExplorerLastOperation() {
+  const res = await apiFetch(`${API_BASE}/explorer/undo`, {
+    method: 'POST',
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.detail || `HTTP ${res.status}`)
+  }
+  return await res.json()
+}
+
+export async function fetchExplorerHistory() {
+  const res = await apiFetch(`${API_BASE}/explorer/history`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return await res.json()
+}
+
+
 

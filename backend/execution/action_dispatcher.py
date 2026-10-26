@@ -81,14 +81,40 @@ class ActionDispatcher:
                     parameters["content"],
                     overwrite=parameters.get("overwrite", False),
                 )
+            elif tool == "fs_browse_dir":
+                raw_result = FilesystemOperations.browse_directory(
+                    path=parameters.get("path"),
+                    sort_by=parameters.get("sort_by", "name"),
+                    sort_order=parameters.get("sort_order", "asc"),
+                    show_hidden=parameters.get("show_hidden", False),
+                    limit=parameters.get("limit", 500),
+                    offset=parameters.get("offset", 0),
+                )
             elif tool == "fs_copy_file":
                 raw_result = FilesystemOperations.copy_file(parameters["src"], parameters["dst"])
+            elif tool == "fs_copy_files":
+                raw_result = FilesystemOperations.safe_copy(
+                    src_paths=parameters.get("src_paths") or parameters.get("paths", []),
+                    dest_folder=parameters.get("dest_folder") or parameters.get("dst"),
+                    batch_id=parameters.get("batch_id"),
+                )
             elif tool == "fs_move_file":
                 raw_result = FilesystemOperations.move_file(parameters["src"], parameters["dst"])
+            elif tool == "fs_move_files":
+                raw_result = FilesystemOperations.safe_move(
+                    src_paths=parameters.get("src_paths") or parameters.get("paths", []),
+                    dest_folder=parameters.get("dest_folder") or parameters.get("dst"),
+                    batch_id=parameters.get("batch_id"),
+                )
             elif tool == "fs_rename_file":
                 raw_result = FilesystemOperations.rename_file(parameters["path"], parameters["new_name"])
             elif tool == "fs_delete_file":
                 raw_result = FilesystemOperations.delete_file(parameters["path"])
+            elif tool == "fs_trash_files":
+                raw_result = FilesystemOperations.safe_trash(
+                    paths=parameters.get("paths") or [parameters.get("path")],
+                    batch_id=parameters.get("batch_id"),
+                )
             elif tool == "fs_open_file":
                 target_path = (
                     parameters.get("path")

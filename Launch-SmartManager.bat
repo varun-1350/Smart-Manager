@@ -17,7 +17,7 @@ if not exist ".venv\Scripts\python.exe" (
 REM Start Ollama only for Local or Auto inference. Online models such as
 REM Gemini do not need a local daemon or an additional command window.
 set "AI_MODE=local"
-for /f "usebackq delims=" %%M in (`".venv\Scripts\python.exe" "backend\launch_mode.py"`) do set "AI_MODE=%%M"
+for /f "usebackq delims=" %%M in (`"".venv\Scripts\python.exe" "backend\launch_mode.py""`) do set "AI_MODE=%%M"
 
 if /I "%AI_MODE%"=="online" (
     echo [Info] Online provider selected; Ollama will not be started.

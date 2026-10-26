@@ -40,9 +40,12 @@ class SecurityPolicy:
     # Actions that require explicit user confirmation
     APPROVAL_REQUIRED_TOOLS: Set[str] = {
         "fs_delete_file",
+        "fs_trash_files",
         "fs_write_text_file",
         "fs_copy_file",
+        "fs_copy_files",
         "fs_move_file",
+        "fs_move_files",
         "fs_rename_file",
         "fs_make_dir",
         "proc_launch",
@@ -60,14 +63,18 @@ class SecurityPolicy:
         # 1. Unknown tool
         known_tools = {
             "fs_list_dir",
+            "fs_browse_dir",
             "fs_file_metadata",
             "fs_search_files",
             "fs_make_dir",
             "fs_write_text_file",
             "fs_copy_file",
+            "fs_copy_files",
             "fs_move_file",
+            "fs_move_files",
             "fs_rename_file",
             "fs_delete_file",
+            "fs_trash_files",
             "fs_open_file",
             "fs_read_text_file",
             "fs_list_downloads",
@@ -91,36 +98,45 @@ class SecurityPolicy:
 
         # 2. Check filesystem path security.  Resolve before comparing so aliases and
         # symlinks cannot be used to reach protected locations.
-        for key in ["path", "src", "dst", "directory"]:
+        all_paths_to_check = []
+        for key in ["path", "src", "dst", "directory", "dest_folder"]:
             if key in parameters and isinstance(parameters[key], str):
-                path_val = parameters[key].strip()
-                if not path_val or len(path_val) > cls.MAX_PATH_LENGTH:
-                    return cls._deny("Path parameter is empty or exceeds the Windows path limit.", RiskLevel.HIGH)
-                # Check traversal attempts
-                if ".." in path_val:
-                    return ActionPermission(
-                        allowed=False,
-                        risk_level=RiskLevel.CRITICAL,
-                        requires_approval=False,
-                        reason=f"Path traversal ('..') is strictly prohibited: {path_val}",
-                    )
+                all_paths_to_check.append(parameters[key])
+        for key in ["paths", "src_paths"]:
+            if key in parameters and isinstance(parameters[key], list):
+                for item in parameters[key]:
+                    if isinstance(item, str):
+                        all_paths_to_check.append(item)
 
-                try:
-                    resolved = resolve_system_path(path_val)
-                    norm_str = str(resolved).lower()
+        for path_val in all_paths_to_check:
+            path_val = path_val.strip()
+            if not path_val or len(path_val) > cls.MAX_PATH_LENGTH:
+                return cls._deny("Path parameter is empty or exceeds the Windows path limit.", RiskLevel.HIGH)
+            # Check traversal attempts
+            if ".." in path_val:
+                return ActionPermission(
+                    allowed=False,
+                    risk_level=RiskLevel.CRITICAL,
+                    requires_approval=False,
+                    reason=f"Path traversal ('..') is strictly prohibited: {path_val}",
+                )
 
-                    # Prevent modifying protected OS directories
-                    if tool in ("fs_make_dir", "fs_write_text_file", "fs_copy_file", "fs_move_file", "fs_rename_file", "fs_delete_file"):
-                        for protected in cls.PROTECTED_SYSTEM_DIRECTORIES:
-                            if norm_str == protected or norm_str.startswith(protected + os.sep):
-                                return ActionPermission(
-                                    allowed=False,
-                                    risk_level=RiskLevel.CRITICAL,
-                                    requires_approval=False,
-                                    reason=f"Modifying protected operating system directory '{protected}' is strictly forbidden.",
-                                )
-                except (OSError, ValueError):
-                    return cls._deny("Invalid filesystem path parameter.", RiskLevel.HIGH)
+            try:
+                resolved = resolve_system_path(path_val)
+                norm_str = str(resolved).lower()
+
+                # Prevent modifying protected OS directories
+                if tool in ("fs_make_dir", "fs_write_text_file", "fs_copy_file", "fs_copy_files", "fs_move_file", "fs_move_files", "fs_rename_file", "fs_delete_file", "fs_trash_files"):
+                    for protected in cls.PROTECTED_SYSTEM_DIRECTORIES:
+                        if norm_str == protected or norm_str.startswith(protected + os.sep):
+                            return ActionPermission(
+                                allowed=False,
+                                risk_level=RiskLevel.CRITICAL,
+                                requires_approval=False,
+                                reason=f"Modifying protected operating system directory '{protected}' is strictly forbidden.",
+                            )
+            except (OSError, ValueError):
+                return cls._deny("Invalid filesystem path parameter.", RiskLevel.HIGH)
 
         if tool == "fs_rename_file":
             name = parameters.get("new_name")

@@ -8,8 +8,15 @@ import {
   Check,
   AlertCircle,
   Cpu,
+  FolderOpen,
+  MessageSquare,
 } from 'lucide-react'
 import Sidebar from './components/Sidebar'
+import FileBrowser from './components/FileBrowser'
+import AiCommandPanel from './components/AiCommandPanel'
+import FilePreviewModal from './components/FilePreviewModal'
+import DuplicatesModal from './components/DuplicatesModal'
+import StorageAnalysisModal from './components/StorageAnalysisModal'
 import MessageBubble from './components/MessageBubble'
 import ConfirmationModal from './components/ConfirmationModal'
 import SettingsModal from './components/SettingsModal'
@@ -25,10 +32,40 @@ import {
   clearAllConversationsApi,
   fetchConversations,
   fetchMessages,
+  fetchLocations,
+  browseDirectory,
+  fetchFilePreview,
+  executeExplorerAction,
+  fetchDuplicates,
+  fetchStorageAnalysis,
+  generateExplorerPlan,
+  executeExplorerPlan,
+  undoExplorerLastOperation,
+  fetchExplorerHistory,
 } from './services/api'
 import logoAsset from './assets/logo.png'
 
 export default function App() {
+  // Top-level Navigation Mode ('explorer' by default, 'chat' for conversation history)
+  const [activeView, setActiveView] = useState('explorer')
+
+  // File Explorer States
+  const [locations, setLocations] = useState([])
+  const [currentPath, setCurrentPath] = useState('')
+  const [browseData, setBrowseData] = useState(null)
+  const [isBrowsing, setIsBrowsing] = useState(false)
+  const [previewData, setPreviewData] = useState(null)
+  const [duplicatesData, setDuplicatesData] = useState(null)
+  const [storageData, setStorageData] = useState(null)
+
+  // AI File Organization Plan States
+  const [planPreview, setPlanPreview] = useState(null)
+  const [isGeneratingPlan, setIsGeneratingPlan] = useState(false)
+  const [isExecutingPlan, setIsExecutingPlan] = useState(false)
+  const [executionResult, setExecutionResult] = useState(null)
+  const [canUndo, setCanUndo] = useState(false)
+
+  // Conversational Task States
   const [conversations, setConversations] = useState([
     {
       id: 'default',
@@ -56,10 +93,12 @@ export default function App() {
   const isAwaitingApproval = Boolean(pendingApproval)
   const isBusy = isLoading && !isAwaitingApproval
 
+  // Initialization
   useEffect(() => {
     refreshHealth()
     fetchConfig().then(setConfig).catch(() => {})
     loadSavedConversations()
+    initExplorer()
 
     const interval = setInterval(refreshHealth, 8000)
     return () => clearInterval(interval)
@@ -79,11 +118,182 @@ export default function App() {
     setHealth(h)
   }
 
+  // ==========================================================================
+  // File Explorer Lifecycle & Handlers
+  // ==========================================================================
+  const initExplorer = async () => {
+    try {
+      const locs = await fetchLocations()
+      setLocations(locs)
+      if (locs && locs.length > 0) {
+        // Default to Desktop or first location
+        const defaultLoc = locs.find((l) => l.category === 'desktop') || locs[0]
+        loadDirectory(defaultLoc.path)
+      }
+      checkUndoStatus()
+    } catch (err) {
+      console.error('Failed to init explorer locations:', err)
+    }
+  }
+
+  const loadDirectory = async (path, sortBy = 'name', sortOrder = 'asc') => {
+    setIsBrowsing(true)
+    try {
+      const data = await browseDirectory(path, sortBy, sortOrder)
+      setBrowseData(data)
+      setCurrentPath(data.current_path)
+    } catch (err) {
+      showToast(`Cannot open folder: ${err.message}`, 'error')
+    } finally {
+      setIsBrowsing(false)
+    }
+  }
+
+  const handleRefreshDirectory = () => {
+    if (currentPath) loadDirectory(currentPath)
+  }
+
+  const handleExplorerAction = async (payload) => {
+    try {
+      const res = await executeExplorerAction(payload)
+      if (payload.action === 'mkdir') {
+        showToast('Folder created', 'success')
+      } else if (payload.action === 'rename') {
+        showToast('Item renamed', 'success')
+      } else if (payload.action === 'trash') {
+        showToast('Moved to trash (undo available)', 'success')
+        setCanUndo(true)
+      } else if (payload.action === 'open') {
+        showToast('Opening with default Windows app', 'info')
+      }
+      handleRefreshDirectory()
+      checkUndoStatus()
+    } catch (err) {
+      showToast(`Action failed: ${err.message}`, 'error')
+    }
+  }
+
+  const handlePreviewFile = async (path) => {
+    try {
+      const preview = await fetchFilePreview(path)
+      setPreviewData(preview)
+    } catch (err) {
+      showToast(`Preview failed: ${err.message}`, 'error')
+    }
+  }
+
+  const handleScanDuplicates = async () => {
+    if (!currentPath) return
+    showToast('Scanning directory for duplicate files...', 'info')
+    try {
+      const dups = await fetchDuplicates(currentPath)
+      setDuplicatesData(dups)
+    } catch (err) {
+      showToast(`Duplicate scan error: ${err.message}`, 'error')
+    }
+  }
+
+  const handleAnalyzeStorage = async () => {
+    if (!currentPath) return
+    showToast('Analyzing folder storage and large files...', 'info')
+    try {
+      const analysis = await fetchStorageAnalysis(currentPath)
+      setStorageData(analysis)
+    } catch (err) {
+      showToast(`Storage analysis error: ${err.message}`, 'error')
+    }
+  }
+
+  const handleCleanDuplicates = async (paths) => {
+    try {
+      await executeExplorerAction({ action: 'trash', paths })
+      showToast(`Moved ${paths.length} duplicate file(s) to trash`, 'success')
+      setCanUndo(true)
+      handleRefreshDirectory()
+    } catch (err) {
+      showToast(`Failed to clean duplicates: ${err.message}`, 'error')
+    }
+  }
+
+  const handleCleanStorageItems = async (paths) => {
+    try {
+      await executeExplorerAction({ action: 'trash', paths })
+      showToast(`Cleaned up ${paths.length} item(s)`, 'success')
+      setCanUndo(true)
+      handleRefreshDirectory()
+    } catch (err) {
+      showToast(`Failed to clean items: ${err.message}`, 'error')
+    }
+  }
+
+  const checkUndoStatus = async () => {
+    try {
+      const history = await fetchExplorerHistory()
+      const hasUndoable = history?.some((b) => !b.undone)
+      setCanUndo(hasUndoable)
+    } catch {
+      setCanUndo(false)
+    }
+  }
+
+  // ==========================================================================
+  // AI Batch Action Planning & Execution
+  // ==========================================================================
+  const handleGeneratePlan = async (instruction) => {
+    if (!currentPath) return
+    setIsGeneratingPlan(true)
+    setPlanPreview(null)
+    setExecutionResult(null)
+    try {
+      const plan = await generateExplorerPlan(currentPath, instruction)
+      setPlanPreview(plan)
+    } catch (err) {
+      showToast(`Failed to generate plan: ${err.message}`, 'error')
+    } finally {
+      setIsGeneratingPlan(false)
+    }
+  }
+
+  const handleExecutePlan = async () => {
+    if (!planPreview || !planPreview.actions?.length) return
+    setIsExecutingPlan(true)
+    try {
+      const batchId = `plan-${Date.now()}`
+      const result = await executeExplorerPlan(batchId, planPreview.actions)
+      setExecutionResult(result)
+      setPlanPreview(null)
+      showToast(`Successfully organized ${result.executed_count} file(s)!`, 'success')
+      setCanUndo(true)
+      handleRefreshDirectory()
+    } catch (err) {
+      showToast(`Failed to execute plan: ${err.message}`, 'error')
+    } finally {
+      setIsExecutingPlan(false)
+    }
+  }
+
+  const handleUndo = async () => {
+    try {
+      const res = await undoExplorerLastOperation()
+      if (res.success) {
+        showToast(`Undone! Restored ${res.undone_count} item(s)`, 'success')
+        handleRefreshDirectory()
+        checkUndoStatus()
+      } else {
+        showToast(res.message || 'No operations available to undo', 'info')
+      }
+    } catch (err) {
+      showToast(`Undo failed: ${err.message}`, 'error')
+    }
+  }
+
+  // ==========================================================================
+  // Conversational Task Chat Handlers
+  // ==========================================================================
   const loadSavedConversations = async () => {
     try {
       const list = await fetchConversations()
       if (list && list.length > 0) {
-        // Load messages for each conversation
         const loaded = await Promise.all(
           list.map(async (c) => {
             try {
@@ -121,114 +331,63 @@ export default function App() {
     }
     setConversations((prev) => [newConv, ...prev])
     setActiveId(newId)
+    setActiveView('chat')
   }
 
   const handleSelectConversation = (id) => {
     setActiveId(id)
+    setActiveView('chat')
   }
 
-  const handleDeleteConversation = async (convId) => {
+  const handleDeleteConversation = async (id) => {
     try {
-      await deleteConversationApi(convId)
-      setConversations((prev) => {
-        const filtered = prev.filter((c) => c.id !== convId)
-        if (filtered.length === 0) {
-          const fresh = { id: 'default', title: 'New Task', messages: [] }
-          setActiveId('default')
-          return [fresh]
-        }
-        if (activeId === convId) {
-          setActiveId(filtered[0].id)
-        }
-        return filtered
-      })
-      showToast('Task deleted successfully', 'success')
+      await deleteConversationApi(id)
+      setConversations((prev) => prev.filter((c) => c.id !== id))
+      if (activeId === id) {
+        const remaining = conversations.filter((c) => c.id !== id)
+        if (remaining.length > 0) setActiveId(remaining[0].id)
+        else handleNewConversation()
+      }
     } catch (err) {
-      showToast(`Failed to delete: ${err.message}`, 'error')
+      showToast(`Failed to delete task: ${err.message}`, 'error')
     }
   }
 
   const handleClearAllConversations = async () => {
-    if (!window.confirm('Are you sure you want to delete all tasks and chat history?')) {
-      return
-    }
     try {
       await clearAllConversationsApi()
-      const fresh = { id: 'default', title: 'New Task', messages: [] }
-      setConversations([fresh])
-      setActiveId('default')
-      showToast('All tasks cleared', 'success')
+      const newId = `conv-${Date.now()}`
+      setConversations([{ id: newId, title: 'Current Session', messages: [] }])
+      setActiveId(newId)
+      showToast('All tasks cleared', 'info')
     } catch (err) {
-      showToast(`Failed to clear: ${err.message}`, 'error')
+      showToast(`Failed to clear tasks: ${err.message}`, 'error')
     }
   }
 
   const handleUnloadModel = async () => {
     setIsUnloading(true)
     try {
-      await unloadModel()
-      await refreshHealth()
-      showToast('Model memory released.', 'success')
+      const res = await unloadModel()
+      if (res.success) {
+        showToast('Model unloaded: VRAM freed', 'success')
+      } else {
+        showToast('Unload signal acknowledged', 'info')
+      }
+      refreshHealth()
     } catch (err) {
-      showToast(`Error freeing RAM: ${err.message}`, 'error')
+      showToast(`Failed to unload: ${err.message}`, 'error')
     } finally {
       setIsUnloading(false)
     }
   }
 
-  const handleStopTask = async () => {
-    if (!isBusy) return
+  const handleSendPrompt = async () => {
+    if (!inputPrompt.trim() || isLoading) return
 
-    const taskId = activeTaskIdRef.current
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort()
-    }
-
-    if (taskId) {
-      await stopTaskApi(taskId)
-    }
-
-    // Immediately free RAM from llama-server
-    try {
-      await unloadModel()
-    } catch {}
-
-    setIsLoading(false)
-
-    // Append stop notice in active conversation
-    const stoppedMsg = {
-      id: `msg-${Date.now()}`,
-      role: 'agent',
-      content: 'Task stopped.',
-      status: 'cancelled',
-      timestamp: Date.now(),
-    }
-
-    setConversations((prev) =>
-      prev.map((c) =>
-        c.id === activeId
-          ? { ...c, messages: [...c.messages, stoppedMsg] }
-          : c
-      )
-    )
-
-    showToast('Task stopped.', 'info')
-    refreshHealth()
-  }
-
-  const handleSendPrompt = async (textToSend) => {
-    const prompt = (textToSend || inputPrompt).trim()
-    if (!prompt || isBusy || isAwaitingApproval) return
-
+    const prompt = inputPrompt.trim()
     setInputPrompt('')
-    setIsLoading(true)
 
-    const taskId = `task-${Date.now()}`
-    activeTaskIdRef.current = taskId
-    const controller = new AbortController()
-    abortControllerRef.current = controller
-
-    // Add user message
     const userMsg = {
       id: `msg-${Date.now()}`,
       role: 'user',
@@ -236,14 +395,21 @@ export default function App() {
       timestamp: Date.now(),
     }
 
+    const taskId = `task-${Date.now()}`
+    activeTaskIdRef.current = taskId
+
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+
+    setIsLoading(true)
+
     setConversations((prev) =>
       prev.map((c) => {
         if (c.id === activeId) {
-          const updatedTitle =
-            c.messages.length === 0 ? prompt.slice(0, 28) : c.title
+          const isFirstMessage = c.messages.length === 0
           return {
             ...c,
-            title: updatedTitle,
+            title: isFirstMessage ? prompt.slice(0, 24) : c.title,
             messages: [...c.messages, userMsg],
           }
         }
@@ -264,11 +430,12 @@ export default function App() {
       const agentMsg = {
         id: `msg-${Date.now() + 1}`,
         role: 'agent',
-        content: result.response || result.summary || (
-          result.status === 'waiting_approval'
+        content:
+          result.response ||
+          result.summary ||
+          (result.status === 'waiting_approval'
             ? 'Awaiting your authorization. No action has been performed yet.'
-            : 'Task completed.'
-        ),
+            : 'Task completed.'),
         plan: result.plan,
         actions: result.actions || [],
         status: result.status || 'success',
@@ -277,19 +444,14 @@ export default function App() {
 
       setConversations((prev) =>
         prev.map((c) =>
-          c.id === activeId
-            ? { ...c, messages: [...c.messages, agentMsg] }
-            : c
+          c.id === activeId ? { ...c, messages: [...c.messages, agentMsg] } : c
         )
       )
       if (result.pending_approval) {
         setPendingApproval({ ...result.pending_approval, conversation_id: activeId })
       }
     } catch (err) {
-      if (err.name === 'AbortError') {
-        // Handled by handleStopTask
-        return
-      }
+      if (err.name === 'AbortError') return
 
       const errorMsg = {
         id: `msg-${Date.now() + 1}`,
@@ -308,13 +470,6 @@ export default function App() {
       abortControllerRef.current = null
       activeTaskIdRef.current = null
       refreshHealth()
-    }
-  }
-
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSendPrompt()
     }
   }
 
@@ -345,9 +500,11 @@ export default function App() {
         status: result.status || 'completed',
         timestamp: Date.now(),
       }
-      setConversations((prev) => prev.map((c) =>
-        c.id === approval.conversation_id ? { ...c, messages: [...c.messages, agentMsg] } : c
-      ))
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === approval.conversation_id ? { ...c, messages: [...c.messages, agentMsg] } : c
+        )
+      )
       if (result.pending_approval) {
         setPendingApproval({ ...result.pending_approval, conversation_id: approval.conversation_id })
       }
@@ -357,9 +514,6 @@ export default function App() {
       setIsLoading(false)
     }
   }
-
-  const handleApprove = () => handleApproval(true)
-  const handleReject = () => handleApproval(false)
 
   return (
     <div className="app-container">
@@ -373,7 +527,15 @@ export default function App() {
         </div>
       )}
 
+      {/* Left Sidebar (Locations, Drives, Tasks, Settings) */}
       <Sidebar
+        activeView={activeView}
+        onSwitchView={setActiveView}
+        locations={locations}
+        currentPath={currentPath}
+        onNavigate={(p) => loadDirectory(p)}
+        onUndo={handleUndo}
+        canUndo={canUndo}
         conversations={conversations}
         activeId={activeId}
         onSelectConversation={handleSelectConversation}
@@ -386,146 +548,172 @@ export default function App() {
         isUnloading={isUnloading}
       />
 
-      <main className="main-chat-area">
-        <header className="chat-header">
-          <div className="chat-header-title-wrap">
-            <h2 className="chat-header-title">
-              {activeConv?.title || 'Smart Manager'}
-            </h2>
-            {(activeConv?.messages?.length || 0) > 0 && <span className="task-count-pill">
-              {activeConv.messages.length}
-            </span>}
-          </div>
+      {/* Main Workspace Area */}
+      {activeView === 'explorer' ? (
+        <main className="main-explorer-area">
+          {/* File Browser Grid/List */}
+          <FileBrowser
+            currentPath={currentPath}
+            browseData={browseData}
+            isLoading={isBrowsing}
+            onNavigate={(p) => loadDirectory(p)}
+            onRefresh={handleRefreshDirectory}
+            onAction={handleExplorerAction}
+            onPreview={handlePreviewFile}
+            onSendToAi={(promptText) => handleGeneratePlan(promptText)}
+            onScanDuplicates={handleScanDuplicates}
+            onAnalyzeStorage={handleAnalyzeStorage}
+          />
 
-          <div className="header-actions-group">
-            <div className="chat-header-model-pill" aria-live="polite">
-              <span className="pulse-dot" aria-hidden="true" />
-              <span className="chat-header-model-label">
-                {health?.active_provider_label || health?.active_model || 'Connecting...'}
-              </span>
+          {/* AI Command & Structured Plan Decision Panel */}
+          <AiCommandPanel
+            currentPath={currentPath}
+            onGeneratePlan={handleGeneratePlan}
+            onExecutePlan={handleExecutePlan}
+            onUndo={handleUndo}
+            isGeneratingPlan={isGeneratingPlan}
+            isExecutingPlan={isExecutingPlan}
+            planPreview={planPreview}
+            onClearPlan={() => setPlanPreview(null)}
+            executionResult={executionResult}
+          />
+        </main>
+      ) : (
+        /* Traditional Chat & Task History Area */
+        <main className="main-chat-area">
+          <header className="chat-header">
+            <div className="chat-header-title-wrap">
+              <h2 className="chat-header-title">
+                {activeConv?.title || 'Smart Manager Tasks'}
+              </h2>
             </div>
-          </div>
-        </header>
-
-        {/* Shimmer progress line when executing */}
-        {isBusy && <div className="shimmer-progress-bar animate-shimmer" />}
-
-        <div className="messages-stream-container">
-          {activeConv?.messages.length === 0 ? (
-            <div className="welcome-screen animate-fade-in">
-              <div className="welcome-hero-logo animate-bounce-subtle">
-                {hasWelcomeLogoError ? (
-                  <span className="welcome-logo-fallback" aria-label="Smart Manager">
-                    <Sparkles size={32} aria-hidden="true" />
-                  </span>
-                ) : (
-                  <img
-                    src={logoAsset}
-                    alt="Smart Manager"
-                    className="welcome-logo-img"
-                    onError={() => setHasWelcomeLogoError(true)}
-                  />
-                )}
-              </div>
-              <h2 className="welcome-title">What can I do for you today?</h2>
-              <p className="welcome-subtitle">
-                Tell Smart Manager what you want to do.
-              </p>
-
-            </div>
-          ) : (
-            activeConv.messages.map((m) => (
-              <MessageBubble key={m.id} message={m} />
-            ))
-          )}
-
-          {/* Running State Card with Micro-Animations */}
-          {isBusy && (
-            <div className="thinking-card-wrapper animate-slide-up">
-              <div className="thinking-card">
-                <div className="thinking-spinner-ring">
-                  <Loader2 size={18} className="spin text-accent" />
-                </div>
-                <div className="thinking-text-group">
-                  <div className="thinking-heading">
-                    Working on your task…
-                  </div>
-                  <div className="thinking-subheading">
-                    Planning, acting, and checking the result
-                  </div>
-                </div>
-                <button
-                  className="thinking-stop-btn animate-pulse-glow"
-                  onClick={handleStopTask}
-                  title="Stop task and release memory"
-                >
-                  <Square size={13} fill="currentColor" />
-                  <span>Stop</span>
-                </button>
+            <div className="header-actions-group">
+              <div className="chat-header-model-pill" aria-live="polite">
+                <span className="pulse-dot" aria-hidden="true" />
+                <span className="chat-header-model-label">
+                  {health?.active_provider_label || health?.active_model || 'Connecting...'}
+                </span>
               </div>
             </div>
-          )}
+          </header>
 
-          <div ref={messagesEndRef} />
-        </div>
+          {isBusy && <div className="shimmer-progress-bar animate-shimmer" />}
 
-        <div className="chat-input-container">
-          <div className="chat-input-box">
-            <textarea
-              className="chat-textarea"
-              placeholder={isAwaitingApproval ? 'Review the approval request above' : 'What would you like to do?'}
-              value={inputPrompt}
-              onChange={(e) => setInputPrompt(e.target.value)}
-              onKeyDown={handleKeyDown}
-              disabled={isAwaitingApproval}
-              aria-label="Describe a Windows task"
-              rows={1}
-            />
+          <div className="messages-stream-container">
+            {activeConv?.messages.length === 0 ? (
+              <div className="welcome-screen animate-fade-in">
+                <div className="welcome-hero-logo animate-bounce-subtle">
+                  {hasWelcomeLogoError ? (
+                    <span className="welcome-logo-fallback" aria-label="Smart Manager">
+                      <Sparkles size={32} aria-hidden="true" />
+                    </span>
+                  ) : (
+                    <img
+                      src={logoAsset}
+                      alt="Smart Manager"
+                      className="welcome-logo-img"
+                      onError={() => setHasWelcomeLogoError(true)}
+                    />
+                  )}
+                </div>
+                <h2 className="welcome-title">AI File Task Console</h2>
+                <p className="welcome-subtitle">
+                  Describe a task to run through the autonomous agent loop.
+                </p>
+              </div>
+            ) : (
+              activeConv.messages.map((m) => <MessageBubble key={m.id} message={m} />)
+            )}
 
-            <div className="input-button-group">
-              {/* Animated Stop Button when active */}
-              {isBusy ? (
-                <button
-                  className="chat-stop-btn animate-pulse-glow"
-                  onClick={handleStopTask}
-                  title="Stop task"
-                  aria-label="Stop task"
-                >
-                  <Square size={15} fill="currentColor" />
-                  <span>Stop</span>
-                </button>
-              ) : (
-                <button
-                  className="chat-send-btn hover-scale"
-                  onClick={() => handleSendPrompt()}
-                  disabled={!inputPrompt.trim() || isAwaitingApproval}
-                  title="Send Prompt (Enter)"
-                  aria-label="Send task"
-                >
-                  <Send size={18} />
-                </button>
-              )}
+            {isBusy && (
+              <div className="thinking-card-wrapper animate-slide-up">
+                <div className="thinking-card">
+                  <div className="thinking-spinner-ring">
+                    <Loader2 size={18} className="spin text-accent" />
+                  </div>
+                  <div className="thinking-text-group">
+                    <div className="thinking-heading">Executing Action</div>
+                    <div className="thinking-subtext">Operating on local Windows system...</div>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          <div className="chat-input-container">
+            <div className="chat-input-card">
+              <textarea
+                className="chat-textarea"
+                rows={1}
+                placeholder="Type a general agent command..."
+                value={inputPrompt}
+                onChange={(e) => setInputPrompt(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    handleSendPrompt()
+                  }
+                }}
+                disabled={isLoading}
+              />
+              <button
+                className="btn-send-message"
+                onClick={handleSendPrompt}
+                disabled={!inputPrompt.trim() || isLoading}
+              >
+                <Send size={15} />
+              </button>
             </div>
           </div>
-        </div>
-      </main>
+        </main>
+      )}
 
-      {/* Confirmation Modal */}
-      <ConfirmationModal
-        request={pendingApproval}
-        onApprove={handleApprove}
-        onReject={handleReject}
-      />
+      {/* Modals */}
+      {previewData && (
+        <FilePreviewModal
+          previewData={previewData}
+          onClose={() => setPreviewData(null)}
+          onOpenWithSystem={(p) => executeExplorerAction({ action: 'open', path: p })}
+        />
+      )}
 
-      {/* Settings Modal */}
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        config={config}
-        onSaveConfig={handleSaveConfig}
-        health={health}
-        onRefreshHealth={refreshHealth}
-      />
+      {duplicatesData && (
+        <DuplicatesModal
+          duplicatesData={duplicatesData}
+          onClose={() => setDuplicatesData(null)}
+          onCleanDuplicates={handleCleanDuplicates}
+        />
+      )}
+
+      {storageData && (
+        <StorageAnalysisModal
+          storageData={storageData}
+          onClose={() => setStorageData(null)}
+          onCleanItems={handleCleanStorageItems}
+          onOpenFile={(p) => executeExplorerAction({ action: 'open', path: p })}
+        />
+      )}
+
+      {pendingApproval && (
+        <ConfirmationModal
+          approval={pendingApproval}
+          onApprove={() => handleApproval(true)}
+          onReject={() => handleApproval(false)}
+        />
+      )}
+
+      {isSettingsOpen && (
+        <SettingsModal
+          config={config}
+          onSave={handleSaveConfig}
+          onClose={() => setIsSettingsOpen(false)}
+          health={health}
+          onRefreshHealth={refreshHealth}
+          onUnloadModel={handleUnloadModel}
+          isUnloading={isUnloading}
+        />
+      )}
     </div>
   )
 }

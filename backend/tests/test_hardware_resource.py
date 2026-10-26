@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, patch, MagicMock
 from httpx import AsyncClient, ASGITransport
 from app import app
 from agent.model import OllamaClient
+from config import settings
 
 
 @pytest.mark.asyncio
@@ -57,5 +58,4 @@ async def test_system_resources_endpoint():
         data = res.json()
         assert "system_ram" in data
         assert data["system_ram"]["total_gb"] > 0
-        assert "active_settings" in data
-        assert data["active_settings"]["num_ctx"] == 2048
+        assert data["active_settings"]["num_ctx"] == settings.ollama_num_ctx

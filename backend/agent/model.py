@@ -12,14 +12,18 @@ T = TypeVar("T", bound=BaseModel)
 
 ToolName = Literal[
     "fs_list_dir",
+    "fs_browse_dir",
     "fs_file_metadata",
     "fs_search_files",
     "fs_make_dir",
     "fs_write_text_file",
     "fs_copy_file",
+    "fs_copy_files",
     "fs_move_file",
+    "fs_move_files",
     "fs_rename_file",
     "fs_delete_file",
+    "fs_trash_files",
     "fs_open_file",
     "fs_read_text_file",
     "fs_list_downloads",
@@ -32,6 +36,24 @@ ToolName = Literal[
     "browser_open_url",
     "browser_play_youtube",
 ]
+
+
+class FileActionItem(BaseModel):
+    id: str = Field(description="Unique action ID in the plan")
+    tool: ToolName = Field(description="Action tool to execute")
+    source: str = Field(description="Original file or folder path")
+    destination: Optional[str] = Field(default=None, description="Target destination path if moving/copying")
+    reason: str = Field(default="", description="Why this change is proposed")
+    risk_level: str = Field(default="low", description="Computed risk level (calculated by backend security)")
+    requires_approval: bool = Field(default=True, description="Whether explicit approval is mandatory")
+
+
+class FilePlanPreview(BaseModel):
+    summary: str = Field(description="Natural-language summary of what the AI proposes to do")
+    target_folder: str = Field(description="Folder being examined or organized")
+    actions: List[FileActionItem] = Field(default_factory=list, description="List of proposed concrete actions")
+    skipped_files: List[Dict[str, str]] = Field(default_factory=list, description="Files left unchanged due to ambiguity or caution")
+    conflicts: List[Dict[str, str]] = Field(default_factory=list, description="Any detected path conflicts")
 
 
 class ProposedAction(BaseModel):

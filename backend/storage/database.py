@@ -92,12 +92,27 @@ def init_db() -> None:
             )
         """)
 
+        # Operation History table for reversible file operations and undo support
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS operation_history (
+                id TEXT PRIMARY KEY,
+                batch_id TEXT NOT NULL,
+                operation_type TEXT NOT NULL,
+                source_path TEXT NOT NULL,
+                destination_path TEXT,
+                extra_data TEXT DEFAULT '{}',
+                undone INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         # Create indexes only after their tables. Existing installations may
         # have a database created by an older version, so this ordering keeps
         # startup migrations idempotent instead of failing before tables exist.
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_conversation_created ON messages(conversation_id, created_at)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_action_logs_task_created ON action_logs(task_id, created_at)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_events_task_created ON task_events(task_id, created_at)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_op_history_batch ON operation_history(batch_id, created_at)")
 
         # App Settings table (key-value store for model and provider preferences)
         cursor.execute("""

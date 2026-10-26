@@ -14,11 +14,13 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from config import settings
 from storage.database import init_db, SettingsRepository
-from storage.history import HistoryRepository
+from storage.history import HistoryRepository, OperationHistoryRepository
 from storage.tasks import TaskRepository
 from security.credentials import CredentialVault
+from security.permissions import SecurityPolicy
+from execution.filesystem import FilesystemOperations, resolve_system_path
 from ai import ProviderManager, OllamaProvider, OnlineProvider
-from agent.model import OllamaClient
+from agent.model import OllamaClient, FilePlanPreview, FileActionItem
 from agent.runtime import AgentRuntime
 
 logging.basicConfig(level=logging.INFO)
@@ -427,6 +429,209 @@ async def delete_conversation(conv_id: str):
 async def clear_all_conversations():
     HistoryRepository.clear_all_conversations()
     return {"success": True, "message": "All conversations cleared"}
+
+
+# ============================================================================
+# File Explorer Core APIs
+# ============================================================================
+
+@app.get("/api/explorer/locations")
+async def get_explorer_locations():
+    return FilesystemOperations.get_quick_locations()
+
+
+@app.get("/api/explorer/browse")
+async def browse_explorer(
+    path: Optional[str] = None,
+    sort_by: str = "name",
+    sort_order: str = "asc",
+    show_hidden: bool = False,
+    limit: int = 500,
+    offset: int = 0,
+):
+    try:
+        return FilesystemOperations.browse_directory(
+            path=path,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            show_hidden=show_hidden,
+            limit=limit,
+            offset=offset,
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except PermissionError as pe:
+        raise HTTPException(status_code=403, detail=str(pe))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/api/explorer/preview")
+async def preview_explorer_file(path: str):
+    try:
+        return FilesystemOperations.file_preview(path)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+class ExplorerActionRequest(BaseModel):
+    action: str = Field(description="Action: mkdir, rename, trash, move, copy, open")
+    path: Optional[str] = None
+    paths: Optional[List[str]] = None
+    new_name: Optional[str] = None
+    destination: Optional[str] = None
+    folder_name: Optional[str] = None
+
+
+@app.post("/api/explorer/action")
+async def handle_explorer_action(req: ExplorerActionRequest):
+    try:
+        action = req.action.lower()
+        if action == "mkdir":
+            if not req.path or not req.folder_name:
+                raise HTTPException(status_code=400, detail="path and folder_name required for mkdir")
+            target = str(Path(req.path) / req.folder_name)
+            perm = SecurityPolicy.evaluate_action("fs_make_dir", {"path": target})
+            if not perm.allowed:
+                raise HTTPException(status_code=403, detail=perm.reason)
+            return FilesystemOperations.make_dir(target)
+
+        elif action == "rename":
+            if not req.path or not req.new_name:
+                raise HTTPException(status_code=400, detail="path and new_name required for rename")
+            perm = SecurityPolicy.evaluate_action("fs_rename_file", {"path": req.path, "new_name": req.new_name})
+            if not perm.allowed:
+                raise HTTPException(status_code=403, detail=perm.reason)
+            return FilesystemOperations.safe_rename(req.path, req.new_name)
+
+        elif action == "trash":
+            targets = req.paths or ([req.path] if req.path else [])
+            if not targets:
+                raise HTTPException(status_code=400, detail="paths required for trash")
+            perm = SecurityPolicy.evaluate_action("fs_trash_files", {"paths": targets})
+            if not perm.allowed:
+                raise HTTPException(status_code=403, detail=perm.reason)
+            return FilesystemOperations.safe_trash(targets)
+
+        elif action == "move":
+            targets = req.paths or ([req.path] if req.path else [])
+            if not targets or not req.destination:
+                raise HTTPException(status_code=400, detail="paths and destination required for move")
+            perm = SecurityPolicy.evaluate_action("fs_move_files", {"src_paths": targets, "dest_folder": req.destination})
+            if not perm.allowed:
+                raise HTTPException(status_code=403, detail=perm.reason)
+            return FilesystemOperations.safe_move(targets, req.destination)
+
+        elif action == "copy":
+            targets = req.paths or ([req.path] if req.path else [])
+            if not targets or not req.destination:
+                raise HTTPException(status_code=400, detail="paths and destination required for copy")
+            perm = SecurityPolicy.evaluate_action("fs_copy_files", {"src_paths": targets, "dest_folder": req.destination})
+            if not perm.allowed:
+                raise HTTPException(status_code=403, detail=perm.reason)
+            return FilesystemOperations.safe_copy(targets, req.destination)
+
+        elif action == "open":
+            if not req.path:
+                raise HTTPException(status_code=400, detail="path required to open")
+            return FilesystemOperations.open_file(req.path)
+
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported explorer action: '{req.action}'")
+
+    except Exception as exc:
+        if isinstance(exc, HTTPException):
+            raise exc
+        logger.exception("Error in explorer action")
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/api/explorer/duplicates")
+async def get_explorer_duplicates(folder: str, min_size: int = 1024):
+    try:
+        return FilesystemOperations.find_duplicates(folder, min_size_bytes=min_size)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/explorer/storage-analysis")
+async def get_explorer_storage_analysis(folder: str):
+    try:
+        return FilesystemOperations.analyze_storage(folder)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+class ExplorerPlanRequest(BaseModel):
+    folder_path: str = Field(min_length=1)
+    instruction: str = Field(min_length=1, max_length=5000)
+
+
+@app.post("/api/explorer/plan")
+async def generate_explorer_plan(req: ExplorerPlanRequest):
+    try:
+        plan = await runtime.planner.plan_file_batch_task(
+            folder_path=req.folder_path,
+            instruction=req.instruction,
+        )
+        return plan.model_dump()
+    except Exception as e:
+        logger.exception("Error generating plan")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+class ExplorerExecutePlanRequest(BaseModel):
+    batch_id: str
+    actions: List[Dict[str, Any]]
+
+
+@app.post("/api/explorer/execute-plan")
+async def execute_explorer_plan(req: ExplorerExecutePlanRequest):
+    executed = []
+    errors = []
+    for item in req.actions:
+        tool = item.get("tool")
+        src = item.get("source")
+        dst = item.get("destination")
+        try:
+            if tool in ("fs_move_file", "fs_move_files"):
+                res = FilesystemOperations.safe_move([src], str(Path(dst).parent), batch_id=req.batch_id)
+                executed.append({"tool": tool, "source": src, "destination": dst, "success": True})
+            elif tool in ("fs_copy_file", "fs_copy_files"):
+                res = FilesystemOperations.safe_copy([src], str(Path(dst).parent), batch_id=req.batch_id)
+                executed.append({"tool": tool, "source": src, "destination": dst, "success": True})
+            elif tool in ("fs_trash_files", "fs_delete_file"):
+                res = FilesystemOperations.safe_trash([src], batch_id=req.batch_id)
+                executed.append({"tool": tool, "source": src, "success": True})
+            elif tool == "fs_rename_file":
+                res = FilesystemOperations.safe_rename(src, Path(dst).name, batch_id=req.batch_id)
+                executed.append({"tool": tool, "source": src, "new_name": Path(dst).name, "success": True})
+        except Exception as e:
+            errors.append({"action": item, "error": str(e)})
+
+    return {
+        "batch_id": req.batch_id,
+        "executed_count": len(executed),
+        "executed": executed,
+        "errors": errors,
+        "success": len(errors) == 0,
+    }
+
+
+@app.post("/api/explorer/undo")
+async def undo_explorer_last_operation():
+    return FilesystemOperations.undo_last_operation()
+
+
+@app.get("/api/explorer/history")
+async def get_explorer_operation_history(limit: int = 15):
+    return OperationHistoryRepository.list_recent_batches(limit=limit)
 
 
 class PingPromptRequest(BaseModel):

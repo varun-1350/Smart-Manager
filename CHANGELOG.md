@@ -2,7 +2,48 @@
 
 All notable changes to the Smart Manager project will be documented in this file.
 
-## [0.3.0] - Phase 11: Windows Packaging, Native Desktop Launcher & Turnkey Distribution (Current)
+## [0.4.0] - AI-Powered File Explorer Transformation (Current)
+
+### Added
+- **Core File Explorer Interface**:
+  - Breadcrumb navigation with clickable path segments.
+  - Switchable Grid and List views with file size, modified date, and category classification tags.
+  - Multi-select batch operations bar (Copy, Move, Trash, Preview).
+  - Right-click context menus for files and folders.
+  - Quick access locations (Desktop, Downloads, Documents, Pictures, Videos, Music) and active physical drive detection with storage meters.
+  - Real-time client-side search filtering.
+  - Safe in-memory text, markdown, JSON, and source file preview modal with native OS launcher.
+- **Natural-Language Action Plans & AI Command Panel**:
+  - Natural-language command bar with instant suggested action chips.
+  - Structured `FilePlanPreview` displaying affected files, source/destination mappings, conflict warnings, and risk levels.
+  - Deterministic rule-based fallback organization engine for zero-latency offline operation.
+- **Cryptographic Duplicate & Storage Diagnostics**:
+  - 2-pass exact duplicate detection engine using size filtering and 64KB-chunked SHA-256 cryptographic hashing.
+  - Storage reclamation analyzer for large files (>50MB), empty folders, and temporary files.
+- **Atomic Operation Ledger & Reversible Undo**:
+  - SQLite `operation_history` table recording batch IDs, actions, and inverse operation payloads.
+  - Single-click rollback engine restoring moved, renamed, copied, or trashed files.
+  - Reversible `safe_trash` staging area (`.smart_manager_trash`) preventing permanent data loss.
+- **Security & Path Traversal Shields**:
+  - Strict path traversal detection (`..`, `~`) and canonicalization via `pathlib.Path.resolve()`.
+  - Windows protected directory prevention for `C:\Windows`, `System32`, `Program Files`, and system partitions.
+  - Deterministic risk classification matrix independent of AI model suggestions.
+- **Comprehensive Documentation**:
+  - `docs/audit-report.md`: Initial audit findings and verified bug fixes.
+  - `docs/project-comparison.md`: Architecture analysis comparing Super Productivity, Plane, Khoj, and Everything.
+  - `docs/architecture.md`: Detailed component blueprints, data flows, and subsystem specifications.
+  - `docs/security-model.md`: Threat model, zero-trust policies, and traversal defenses.
+  - `docs/development.md`: Developer guide, local environment setup, testing, and contribution patterns.
+- **Testing & Verification**:
+  - Added `backend/tests/test_explorer.py` covering directory browsing, quick locations, file previews, safe move/trash undo, SHA-256 duplicate detection, storage analysis, and API routes.
+  - Full backend test suite passing with 37 tests.
+  - Frontend production build verified with Vite 5.4.
+
+### Fixed
+- **Windows CMD Batch Quoting in `Launch-SmartManager.bat`**: Fixed `The system cannot find the path specified` error caused by CMD backtick quote stripping when evaluating launch mode.
+- **Hardware Telemetry Test Assertion**: Dynamic comparison against `settings.ollama_num_ctx` in `test_hardware_resource.py`.
+
+## [0.3.0] - Phase 11: Windows Packaging, Native Desktop Launcher & Turnkey Distribution
 
 ### Added
 - **Native Windows Desktop Window Launcher** ([backend/desktop_launcher.py](file:///d:/my%20projects/Smart-Manager/backend/desktop_launcher.py)):

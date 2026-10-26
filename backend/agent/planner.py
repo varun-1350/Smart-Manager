@@ -45,6 +45,11 @@ AVAILABLE TOOLS & SIGNATURES:
 
 
 from config import settings
+from pathlib import Path
+import json
+from agent.model import FilePlanPreview, FileActionItem
+from execution.filesystem import FilesystemOperations, resolve_system_path
+from security.permissions import SecurityPolicy
 
 
 class Planner:
@@ -77,10 +82,146 @@ Remember: return ONLY valid JSON."""
             prompt=user_prompt,
             response_model=AgentStepDecision,
             system=SYSTEM_PROMPT,
-            # Grammar-constrained JSON normally succeeds on the first pass.
-            # One retry preserves recovery while avoiding repeated 60-second
-            # waits on a malformed local-model response.
             retries=1,
         )
 
         return decision
+
+    async def plan_file_batch_task(self, folder_path: str, instruction: str) -> FilePlanPreview:
+        """
+        Creates a structured, inspectable batch action plan for file organization and management.
+        Guarantees that risk levels are strictly computed by SecurityPolicy, never trusted from LLM.
+        """
+        target = resolve_system_path(folder_path)
+        if not target.exists() or not target.is_dir():
+            raise FileNotFoundError(f"Folder not found: {folder_path}")
+
+        browse_res = FilesystemOperations.browse_directory(str(target), limit=300)
+        file_entries = [e for e in browse_res["entries"] if not e["is_dir"]]
+
+        if not file_entries:
+            return FilePlanPreview(
+                summary="The target folder contains no files to organize.",
+                target_folder=str(target),
+                actions=[],
+                skipped_files=[],
+                conflicts=[],
+            )
+
+        # Category mapping for type organization
+        category_folder_names = {
+            "documents": "Documents",
+            "spreadsheets": "Spreadsheets",
+            "presentations": "Presentations",
+            "images": "Images",
+            "videos": "Videos",
+            "audio": "Audio",
+            "archives": "Archives",
+            "code": "Code",
+            "text": "Text Files",
+            "executables": "Executables",
+        }
+
+        # Check if instruction is a standard organization request (fast & deterministic path)
+        inst_lower = instruction.lower()
+        use_rule_engine = any(k in inst_lower for k in ["file type", "type", "extension", "organize by type", "group by type", "categorize"])
+
+        actions = []
+        skipped = []
+        conflicts = []
+
+        if use_rule_engine or not self.client:
+            # Deterministic, safe rule-based planner
+            action_counter = 1
+            for f in file_entries:
+                cat = f.get("category", "other")
+                subfolder = category_folder_names.get(cat)
+                if not subfolder or cat == "other":
+                    skipped.append({"file": f["name"], "reason": "Category is uncertain or miscellaneous"})
+                    continue
+
+                dest_dir = target / subfolder
+                dest_file = dest_dir / f["name"]
+
+                has_conflict = dest_file.exists()
+                if has_conflict:
+                    conflicts.append({
+                        "source": f["path"],
+                        "destination": str(dest_file),
+                        "conflict": "Destination file already exists (will auto-version if approved)",
+                    })
+
+                actions.append(FileActionItem(
+                    id=f"act-{action_counter}",
+                    tool="fs_move_file",
+                    source=f["path"],
+                    destination=str(dest_file),
+                    reason=f"Move {f['extension'].upper() or 'file'} into {subfolder}/ based on file type",
+                    risk_level=SecurityPolicy.evaluate_action("fs_move_file", {"src": f["path"], "dst": str(dest_file)}).risk_level.value,
+                    requires_approval=True,
+                ))
+                action_counter += 1
+
+            summary = f"Proposed moving {len(actions)} files into categorized folders based on file type."
+            if skipped:
+                summary += f" Kept {len(skipped)} files unchanged due to uncertain types."
+
+            return FilePlanPreview(
+                summary=summary,
+                target_folder=str(target),
+                actions=actions,
+                skipped_files=skipped,
+                conflicts=conflicts,
+            )
+
+        # AI-Assisted Planning for custom/complex instructions
+        file_summary_list = [
+            {"name": f["name"], "category": f["category"], "ext": f["extension"], "size": f["size_formatted"]}
+            for f in file_entries[:60]
+        ]
+        prompt = f"""You are Smart Manager's File Organization Specialist.
+Target Directory: {str(target)}
+User Goal: {instruction}
+
+Available Files in Directory:
+{json.dumps(file_summary_list, indent=1)}
+
+Plan the appropriate file moves or renames to satisfy the user goal.
+Rules:
+1. Provide a concise summary of the organization strategy.
+2. For each file moved, specify tool="fs_move_file", source=exact file path, destination=proposed destination path.
+3. If a file does not fit or is ambiguous, list it under skipped_files with a reason.
+4. Do NOT propose deleting files unless explicitly requested.
+5. Return ONLY a valid JSON object matching the requested schema."""
+
+        try:
+            plan = await self.client.generate_structured(
+                prompt=prompt,
+                response_model=FilePlanPreview,
+                system="You are an expert file organizer. Plan precise file moves and renames. Return ONLY valid JSON matching the schema.",
+                retries=1,
+            )
+            # Recompute risk_level and requires_approval through SecurityPolicy for EVERY item
+            validated_actions = []
+            for act in plan.actions:
+                dest = act.destination or str(target / act.source)
+                sec = SecurityPolicy.evaluate_action(act.tool, {"src": act.source, "dst": dest, "path": act.source})
+                dest_p = Path(dest)
+                if dest_p.exists():
+                    plan.conflicts.append({"source": act.source, "destination": dest, "conflict": "Target exists"})
+                validated_actions.append(FileActionItem(
+                    id=act.id,
+                    tool=act.tool,
+                    source=act.source,
+                    destination=dest,
+                    reason=act.reason,
+                    risk_level=sec.risk_level.value,
+                    requires_approval=sec.requires_approval,
+                ))
+            plan.actions = validated_actions
+            plan.target_folder = str(target)
+            return plan
+        except Exception:
+            # Fallback to rule engine on model failure
+            return await self.plan_file_batch_task(folder_path, "organize by file type")
+

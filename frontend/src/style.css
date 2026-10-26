@@ -4511,12 +4511,17 @@ button { min-height: 44px; }
   padding: 12px;
 }
 
+.file-table-row.focused:not(.selected) {
+  background: rgba(255, 255, 255, 0.03);
+}
+
 .file-grid-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  padding: 12px 8px;
+  padding: 14px 8px 10px;
   background: #1c1e24;
   border: 1px solid #282c35;
   border-radius: 6px;
@@ -4532,6 +4537,33 @@ button { min-height: 44px; }
 .file-grid-card.selected {
   background: rgba(37, 99, 235, 0.15);
   border-color: #3b82f6;
+}
+
+.file-grid-card.focused:not(.selected) {
+  border-color: #4b5563;
+}
+
+.grid-card-checkbox {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  cursor: pointer;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.6;
+  transition: opacity 0.12s, color 0.12s;
+}
+
+.file-grid-card:hover .grid-card-checkbox,
+.grid-card-checkbox:hover {
+  opacity: 1;
+}
+
+.grid-card-checkbox .checked {
+  color: #3b82f6;
+  opacity: 1;
 }
 
 .grid-icon-wrap {

@@ -64,6 +64,7 @@ export default function FileExplorer({
   const [newFolderName, setNewFolderName] = useState('')
   const [renamingItem, setRenamingItem] = useState(null)
   const [renameValue, setRenameValue] = useState('')
+  const [focusedPath, setFocusedPath] = useState(null)
 
   // Close context menu on outside click
   useEffect(() => {
@@ -81,6 +82,7 @@ export default function FileExplorer({
     setSearchQuery('')
     setContextMenu(null)
     setRenamingItem(null)
+    setFocusedPath(null)
   }, [currentPath])
 
   const entries = browseData?.entries || []
@@ -153,24 +155,7 @@ export default function FileExplorer({
   }
 
   const handleRowClick = (item, e) => {
-    if (e.ctrlKey || e.metaKey) {
-      toggleSelect(item.path, e)
-    } else if (e.shiftKey && selectedPaths.size > 0) {
-      // Range select
-      const lastSelected = Array.from(selectedPaths)[selectedPaths.size - 1]
-      const lastIdx = processedEntries.findIndex((e) => e.path === lastSelected)
-      const currentIdx = processedEntries.findIndex((e) => e.path === item.path)
-      if (lastIdx !== -1 && currentIdx !== -1) {
-        const [start, end] = [Math.min(lastIdx, currentIdx), Math.max(lastIdx, currentIdx)]
-        const rangePaths = processedEntries.slice(start, end + 1).map((e) => e.path)
-        setSelectedPaths(new Set([...selectedPaths, ...rangePaths]))
-        return
-      }
-      toggleSelect(item.path, e)
-    } else {
-      // Single selection
-      setSelectedPaths(new Set([item.path]))
-    }
+    setFocusedPath(item.path)
   }
 
   const handleRowDoubleClick = (item) => {
@@ -612,7 +597,7 @@ export default function FileExplorer({
                     return (
                       <tr
                         key={item.path}
-                        className={`file-table-row ${isSelected ? 'selected' : ''}`}
+                        className={`file-table-row ${isSelected ? 'selected' : ''} ${focusedPath === item.path ? 'focused' : ''}`}
                         onClick={(e) => handleRowClick(item, e)}
                         onDoubleClick={() => handleRowDoubleClick(item)}
                         onContextMenu={(e) => handleContextMenu(e, item)}
@@ -683,12 +668,23 @@ export default function FileExplorer({
                 return (
                   <div
                     key={item.path}
-                    className={`file-grid-card ${isSelected ? 'selected' : ''}`}
+                    className={`file-grid-card ${isSelected ? 'selected' : ''} ${focusedPath === item.path ? 'focused' : ''}`}
                     onClick={(e) => handleRowClick(item, e)}
                     onDoubleClick={() => handleRowDoubleClick(item)}
                     onContextMenu={(e) => handleContextMenu(e, item)}
                     title={item.name}
                   >
+                    <div
+                      className="grid-card-checkbox"
+                      onClick={(e) => toggleSelect(item.path, e)}
+                      title="Select item"
+                    >
+                      {isSelected ? (
+                        <CheckSquare size={13} className="checkbox-icon checked" />
+                      ) : (
+                        <Square size={13} className="checkbox-icon" />
+                      )}
+                    </div>
                     <div className="grid-icon-wrap">
                       {renderCategoryIcon(item.category, item.is_dir, 32)}
                     </div>

@@ -284,35 +284,48 @@ export default function App() {
   // ==========================================================================
   // AI Planning & Execution Handlers
   // ==========================================================================
-  const handleGeneratePlan = async (instruction) => {
-    if (!currentPath) return
+  // ==========================================================================
+  // AI Planning & Execution Handlers
+  // ==========================================================================
+  const handleGeneratePlan = async (instruction, signal = null) => {
+    if (!currentPath) return null
     setIsGeneratingPlan(true)
     setPlanPreview(null)
     setExecutionResult(null)
     try {
-      const plan = await generateExplorerPlan(currentPath, instruction)
+      const plan = await generateExplorerPlan(currentPath, instruction, signal)
       setPlanPreview(plan)
+      return plan
     } catch (err) {
-      showToast(`Failed to generate plan: ${err.message}`, 'error')
+      if (err.name !== 'AbortError') {
+        showToast(`Failed to generate plan: ${err.message}`, 'error')
+      }
+      throw err
     } finally {
       setIsGeneratingPlan(false)
     }
   }
 
   const handleExecutePlan = async () => {
-    if (!planPreview || !planPreview.actions?.length) return
+    if (!planPreview || !planPreview.actions?.length || isExecutingPlan) return
     setIsExecutingPlan(true)
+    const folderName = currentPath ? currentPath.split('\\').pop() || currentPath : 'current folder'
     try {
       const batchId = `plan-${Date.now()}`
       const result = await executeExplorerPlan(batchId, planPreview.actions)
       setExecutionResult(result)
 
+      const successCount = result.executed_count || 0
+      const errorCount = result.errors?.length || 0
+
       // Add completion record to conversation
       const summaryMsg = {
         id: `msg-${Date.now()}`,
         role: 'agent',
-        content: `Executed file organization plan: ${result.executed_count} file(s) processed in **${currentPath.split('\\').pop() || currentPath}**.`,
-        status: 'success',
+        content: errorCount > 0
+          ? `Executed ${successCount} file operation(s) with ${errorCount} error(s) in **${folderName}**.\n\n${result.errors.map((e) => `- ${e.action?.tool || 'action'}: ${e.error}`).join('\n')}`
+          : `Successfully completed all ${successCount} file operation(s) in **${folderName}**.`,
+        status: errorCount > 0 ? 'failed' : 'success',
         timestamp: Date.now(),
       }
       setConversations((prev) =>
@@ -322,11 +335,27 @@ export default function App() {
       )
 
       setPlanPreview(null)
-      showToast(`Successfully organized ${result.executed_count} file(s)!`, 'success')
+      if (errorCount === 0) {
+        showToast(`Successfully organized ${successCount} file(s)!`, 'success')
+      } else {
+        showToast(`Executed ${successCount} operations with ${errorCount} errors`, 'warning')
+      }
       setCanUndo(true)
       handleRefreshDirectory()
     } catch (err) {
       showToast(`Failed to execute plan: ${err.message}`, 'error')
+      const errorMsg = {
+        id: `msg-${Date.now()}`,
+        role: 'agent',
+        content: `Error executing file operations: ${err.message}`,
+        status: 'failed',
+        timestamp: Date.now(),
+      }
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === activeId ? { ...c, messages: [...c.messages, errorMsg] } : c
+        )
+      )
     } finally {
       setIsExecutingPlan(false)
     }
@@ -336,12 +365,14 @@ export default function App() {
   // Unified Chat & Task Execution
   // ==========================================================================
   const handleSendMessage = async (prompt) => {
-    if (!prompt.trim() || isLoading) return
+    const trimmed = prompt ? prompt.trim() : ''
+    // Guard against empty input or repeated submission while busy
+    if (!trimmed || isLoading || isExecutingPlan || isGeneratingPlan) return
 
     const userMsg = {
       id: `msg-${Date.now()}`,
       role: 'user',
-      content: prompt,
+      content: trimmed,
       timestamp: Date.now(),
     }
 
@@ -351,7 +382,7 @@ export default function App() {
           const isFirstMessage = c.messages.length === 0
           return {
             ...c,
-            title: isFirstMessage ? prompt.slice(0, 24) : c.title,
+            title: isFirstMessage ? trimmed.slice(0, 24) : c.title,
             messages: [...c.messages, userMsg],
           }
         }
@@ -360,7 +391,7 @@ export default function App() {
     )
 
     // Check if the prompt is asking for file organization/cleanup in current folder
-    const lower = prompt.toLowerCase()
+    const lower = trimmed.toLowerCase()
     const isFileOrgIntent =
       lower.includes('organize') ||
       lower.includes('group') ||
@@ -372,13 +403,60 @@ export default function App() {
       selectedPaths.size > 0
 
     if (isFileOrgIntent && currentPath) {
+      const planId = `plan-${Date.now()}`
+      activeTaskIdRef.current = planId
+      const controller = new AbortController()
+      abortControllerRef.current = controller
+      const timeoutId = setTimeout(() => {
+        controller.abort()
+      }, 60000)
+
       setIsLoading(true)
       try {
-        await handleGeneratePlan(prompt)
+        const plan = await handleGeneratePlan(trimmed, controller.signal)
+        if (plan) {
+          const planSummary = plan.summary || `Proposed ${plan.actions?.length || 0} file operation(s).`
+          const agentMsg = {
+            id: `msg-${Date.now() + 1}`,
+            role: 'agent',
+            content:
+              plan.actions && plan.actions.length > 0
+                ? `${planSummary}\n\nPlease review the proposed file operations below and click **Approve & Execute** to apply them.`
+                : `${planSummary}\n\nNo file changes were required for this folder.`,
+            plan: { summary: planSummary },
+            actions: plan.actions || [],
+            status: 'success',
+            timestamp: Date.now(),
+          }
+          setConversations((prev) =>
+            prev.map((c) =>
+              c.id === activeId ? { ...c, messages: [...c.messages, agentMsg] } : c
+            )
+          )
+        }
       } catch (err) {
-        showToast(`AI Planning error: ${err.message}`, 'error')
+        const isAbort = err.name === 'AbortError'
+        const errorMsg = {
+          id: `msg-${Date.now() + 1}`,
+          role: 'agent',
+          content: isAbort
+            ? 'Request was stopped or timed out after 60 seconds.'
+            : `Failed to prepare file operations: ${err.message}. Please check your active AI model in Settings or ensure the target directory is accessible.`,
+          status: isAbort ? 'cancelled' : 'failed',
+          timestamp: Date.now(),
+        }
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.id === activeId ? { ...c, messages: [...c.messages, errorMsg] } : c
+          )
+        )
       } finally {
+        clearTimeout(timeoutId)
         setIsLoading(false)
+        setIsGeneratingPlan(false)
+        abortControllerRef.current = null
+        activeTaskIdRef.current = null
+        refreshHealth()
       }
       return
     }
@@ -388,6 +466,9 @@ export default function App() {
     activeTaskIdRef.current = taskId
     const controller = new AbortController()
     abortControllerRef.current = controller
+    const timeoutId = setTimeout(() => {
+      controller.abort()
+    }, 60000)
 
     setIsLoading(true)
 
@@ -395,7 +476,7 @@ export default function App() {
       const result = await executeTaskApi(
         {
           task_id: taskId,
-          prompt: prompt,
+          prompt: trimmed,
           conversation_id: activeId,
         },
         controller.signal
@@ -426,12 +507,14 @@ export default function App() {
         setPendingApproval({ ...result.pending_approval, conversation_id: activeId })
       }
     } catch (err) {
-      if (err.name === 'AbortError') return
+      const isAbort = err.name === 'AbortError'
       const errorMsg = {
         id: `msg-${Date.now() + 1}`,
         role: 'agent',
-        content: `Error executing task: ${err.message}`,
-        status: 'failed',
+        content: isAbort
+          ? 'Task was stopped or timed out after 60 seconds.'
+          : `Error executing task: ${err.message}. Please verify your AI provider status in Settings.`,
+        status: isAbort ? 'cancelled' : 'failed',
         timestamp: Date.now(),
       }
       setConversations((prev) =>
@@ -440,6 +523,7 @@ export default function App() {
         )
       )
     } finally {
+      clearTimeout(timeoutId)
       setIsLoading(false)
       abortControllerRef.current = null
       activeTaskIdRef.current = null
@@ -451,10 +535,11 @@ export default function App() {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
     }
-    if (activeTaskIdRef.current) {
+    if (activeTaskIdRef.current && !activeTaskIdRef.current.startsWith('plan-')) {
       stopTaskApi(activeTaskIdRef.current).catch(() => {})
     }
     setIsLoading(false)
+    setIsGeneratingPlan(false)
   }
 
   const handleApproval = async (approved) => {

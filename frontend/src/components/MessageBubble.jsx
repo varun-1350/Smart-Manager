@@ -175,7 +175,7 @@ export default function MessageBubble({ message }) {
         )}
 
         {/* Agent Final Output Text */}
-        {!isUser && message.content && message.status !== 'waiting_approval' && (
+        {!isUser && message.content && (
           <div className="agent-text markdown-body">
             {message.content}
           </div>

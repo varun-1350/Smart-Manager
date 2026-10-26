@@ -8,8 +8,9 @@ function describeAction(request) {
   return request.description || 'Allow Smart Manager to make this change?'
 }
 
-export default function ConfirmationModal({ request, onApprove, onReject }) {
-  if (!request) return null
+export default function ConfirmationModal({ request, approval, onApprove, onReject }) {
+  const req = request || approval
+  if (!req) return null
   const [showDetails, setShowDetails] = useState(false)
 
   return (
@@ -26,7 +27,7 @@ export default function ConfirmationModal({ request, onApprove, onReject }) {
         </div>
 
         <div className="modal-body">
-          <p className="approval-question">{describeAction(request)}</p>
+          <p className="approval-question">{describeAction(req)}</p>
           <div className="approval-notice">
             <ShieldCheck size={17} />
             <span>No changes have been made yet.</span>
@@ -34,7 +35,7 @@ export default function ConfirmationModal({ request, onApprove, onReject }) {
           <button className="technical-details-toggle" type="button" onClick={() => setShowDetails(!showDetails)} aria-expanded={showDetails}>
             Technical details {showDetails ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
           </button>
-          {showDetails && <pre className="approval-details">{JSON.stringify({ action: request.tool, parameters: request.parameters }, null, 2)}</pre>}
+          {showDetails && <pre className="approval-details">{JSON.stringify({ action: req.tool, parameters: req.parameters }, null, 2)}</pre>}
         </div>
 
         <div className="modal-footer">
@@ -44,7 +45,7 @@ export default function ConfirmationModal({ request, onApprove, onReject }) {
           </button>
           <button className="btn btn-primary" onClick={onApprove}>
             <Check size={16} />
-            <span>{request.tool === 'fs_make_dir' ? 'Create folder' : 'Approve change'}</span>
+            <span>{req.tool === 'fs_make_dir' ? 'Create folder' : 'Approve change'}</span>
           </button>
         </div>
       </section>

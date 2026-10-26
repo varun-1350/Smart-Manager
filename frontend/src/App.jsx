@@ -1,23 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react'
 import {
-  Send,
-  Sparkles,
-  Loader2,
-  Square,
-  Zap,
   Check,
   AlertCircle,
-  Cpu,
-  FolderOpen,
-  MessageSquare,
+  Zap,
 } from 'lucide-react'
-import Sidebar from './components/Sidebar'
-import FileBrowser from './components/FileBrowser'
-import AiCommandPanel from './components/AiCommandPanel'
+import CompactHeader from './components/CompactHeader'
+import FileExplorer from './components/FileExplorer'
+import AiChatAssistant from './components/AiChatAssistant'
 import FilePreviewModal from './components/FilePreviewModal'
 import DuplicatesModal from './components/DuplicatesModal'
 import StorageAnalysisModal from './components/StorageAnalysisModal'
-import MessageBubble from './components/MessageBubble'
 import ConfirmationModal from './components/ConfirmationModal'
 import SettingsModal from './components/SettingsModal'
 import {
@@ -43,29 +35,37 @@ import {
   undoExplorerLastOperation,
   fetchExplorerHistory,
 } from './services/api'
-import logoAsset from './assets/logo.png'
 
 export default function App() {
-  // Top-level Navigation Mode ('explorer' by default, 'chat' for conversation history)
-  const [activeView, setActiveView] = useState('explorer')
+  // 60:40 Horizontal Split Ratio (persisted in localStorage)
+  const [splitPercent, setSplitPercent] = useState(() => {
+    try {
+      const saved = localStorage.getItem('smart_manager_split_ratio')
+      return saved ? Math.min(Math.max(parseFloat(saved), 35), 75) : 60
+    } catch {
+      return 60
+    }
+  })
+  const [isDragging, setIsDragging] = useState(false)
 
-  // File Explorer States
+  // File Explorer State
   const [locations, setLocations] = useState([])
   const [currentPath, setCurrentPath] = useState('')
   const [browseData, setBrowseData] = useState(null)
   const [isBrowsing, setIsBrowsing] = useState(false)
+  const [selectedPaths, setSelectedPaths] = useState(new Set())
   const [previewData, setPreviewData] = useState(null)
   const [duplicatesData, setDuplicatesData] = useState(null)
   const [storageData, setStorageData] = useState(null)
+  const [canUndo, setCanUndo] = useState(false)
 
-  // AI File Organization Plan States
+  // AI Structured File Plan States
   const [planPreview, setPlanPreview] = useState(null)
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false)
   const [isExecutingPlan, setIsExecutingPlan] = useState(false)
   const [executionResult, setExecutionResult] = useState(null)
-  const [canUndo, setCanUndo] = useState(false)
 
-  // Conversational Task States
+  // Conversational Assistant State
   const [conversations, setConversations] = useState([
     {
       id: 'default',
@@ -74,7 +74,6 @@ export default function App() {
     },
   ])
   const [activeId, setActiveId] = useState('default')
-  const [inputPrompt, setInputPrompt] = useState('')
   const [health, setHealth] = useState(null)
   const [config, setConfig] = useState(null)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
@@ -82,16 +81,12 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false)
   const [isUnloading, setIsUnloading] = useState(false)
   const [toastMessage, setToastMessage] = useState(null)
-  const [hasWelcomeLogoError, setHasWelcomeLogoError] = useState(false)
 
-  const messagesEndRef = useRef(null)
   const abortControllerRef = useRef(null)
   const activeTaskIdRef = useRef(null)
 
   const activeConv =
     conversations.find((c) => c.id === activeId) || conversations[0]
-  const isAwaitingApproval = Boolean(pendingApproval)
-  const isBusy = isLoading && !isAwaitingApproval
 
   // Initialization
   useEffect(() => {
@@ -104,9 +99,44 @@ export default function App() {
     return () => clearInterval(interval)
   }, [])
 
+  // Draggable Split Divider Handlers
+  const handleDividerMouseDown = (e) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [activeConv?.messages, isLoading])
+    if (!isDragging) return
+
+    const handleMouseMove = (e) => {
+      const containerWidth = window.innerWidth
+      if (containerWidth <= 0) return
+      const newPercent = (e.clientX / containerWidth) * 100
+      const clamped = Math.min(Math.max(newPercent, 35), 75)
+      setSplitPercent(clamped)
+      try {
+        localStorage.setItem('smart_manager_split_ratio', String(clamped))
+      } catch {}
+    }
+
+    const handleMouseUp = () => {
+      setIsDragging(false)
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [isDragging])
+
+  const handleResetDivider = () => {
+    setSplitPercent(60)
+    try {
+      localStorage.setItem('smart_manager_split_ratio', '60')
+    } catch {}
+  }
 
   const showToast = (text, type = 'info') => {
     setToastMessage({ text, type })
@@ -119,14 +149,13 @@ export default function App() {
   }
 
   // ==========================================================================
-  // File Explorer Lifecycle & Handlers
+  // File Explorer Handlers
   // ==========================================================================
   const initExplorer = async () => {
     try {
       const locs = await fetchLocations()
       setLocations(locs)
       if (locs && locs.length > 0) {
-        // Default to Desktop or first location
         const defaultLoc = locs.find((l) => l.category === 'desktop') || locs[0]
         loadDirectory(defaultLoc.path)
       }
@@ -138,6 +167,7 @@ export default function App() {
 
   const loadDirectory = async (path, sortBy = 'name', sortOrder = 'asc') => {
     setIsBrowsing(true)
+    setSelectedPaths(new Set())
     try {
       const data = await browseDirectory(path, sortBy, sortOrder)
       setBrowseData(data)
@@ -157,14 +187,14 @@ export default function App() {
     try {
       const res = await executeExplorerAction(payload)
       if (payload.action === 'mkdir') {
-        showToast('Folder created', 'success')
+        showToast('Folder created successfully', 'success')
       } else if (payload.action === 'rename') {
-        showToast('Item renamed', 'success')
+        showToast('Item renamed successfully', 'success')
       } else if (payload.action === 'trash') {
         showToast('Moved to trash (undo available)', 'success')
         setCanUndo(true)
       } else if (payload.action === 'open') {
-        showToast('Opening with default Windows app', 'info')
+        showToast('Opened with system handler', 'info')
       }
       handleRefreshDirectory()
       checkUndoStatus()
@@ -184,7 +214,7 @@ export default function App() {
 
   const handleScanDuplicates = async () => {
     if (!currentPath) return
-    showToast('Scanning directory for duplicate files...', 'info')
+    showToast('Scanning for duplicate files via SHA-256...', 'info')
     try {
       const dups = await fetchDuplicates(currentPath)
       setDuplicatesData(dups)
@@ -195,7 +225,7 @@ export default function App() {
 
   const handleAnalyzeStorage = async () => {
     if (!currentPath) return
-    showToast('Analyzing folder storage and large files...', 'info')
+    showToast('Analyzing storage and large files...', 'info')
     try {
       const analysis = await fetchStorageAnalysis(currentPath)
       setStorageData(analysis)
@@ -236,8 +266,23 @@ export default function App() {
     }
   }
 
+  const handleUndo = async () => {
+    try {
+      const res = await undoExplorerLastOperation()
+      if (res.success) {
+        showToast(`Undone! Restored ${res.undone_count} item(s)`, 'success')
+        handleRefreshDirectory()
+        checkUndoStatus()
+      } else {
+        showToast(res.message || 'No operations available to undo', 'info')
+      }
+    } catch (err) {
+      showToast(`Undo failed: ${err.message}`, 'error')
+    }
+  }
+
   // ==========================================================================
-  // AI Batch Action Planning & Execution
+  // AI Planning & Execution Handlers
   // ==========================================================================
   const handleGeneratePlan = async (instruction) => {
     if (!currentPath) return
@@ -261,6 +306,21 @@ export default function App() {
       const batchId = `plan-${Date.now()}`
       const result = await executeExplorerPlan(batchId, planPreview.actions)
       setExecutionResult(result)
+
+      // Add completion record to conversation
+      const summaryMsg = {
+        id: `msg-${Date.now()}`,
+        role: 'agent',
+        content: `Executed file organization plan: ${result.executed_count} file(s) processed in **${currentPath.split('\\').pop() || currentPath}**.`,
+        status: 'success',
+        timestamp: Date.now(),
+      }
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === activeId ? { ...c, messages: [...c.messages, summaryMsg] } : c
+        )
+      )
+
       setPlanPreview(null)
       showToast(`Successfully organized ${result.executed_count} file(s)!`, 'success')
       setCanUndo(true)
@@ -272,121 +332,11 @@ export default function App() {
     }
   }
 
-  const handleUndo = async () => {
-    try {
-      const res = await undoExplorerLastOperation()
-      if (res.success) {
-        showToast(`Undone! Restored ${res.undone_count} item(s)`, 'success')
-        handleRefreshDirectory()
-        checkUndoStatus()
-      } else {
-        showToast(res.message || 'No operations available to undo', 'info')
-      }
-    } catch (err) {
-      showToast(`Undo failed: ${err.message}`, 'error')
-    }
-  }
-
   // ==========================================================================
-  // Conversational Task Chat Handlers
+  // Unified Chat & Task Execution
   // ==========================================================================
-  const loadSavedConversations = async () => {
-    try {
-      const list = await fetchConversations()
-      if (list && list.length > 0) {
-        const loaded = await Promise.all(
-          list.map(async (c) => {
-            try {
-              const msgs = await fetchMessages(c.id)
-              return {
-                id: c.id,
-                title: c.title,
-                messages: msgs.map((m) => ({
-                  id: m.id,
-                  role: m.role,
-                  content: m.content,
-                  status: m.status,
-                  timestamp: new Date(m.created_at).getTime(),
-                })),
-              }
-            } catch {
-              return { id: c.id, title: c.title, messages: [] }
-            }
-          })
-        )
-        setConversations(loaded)
-        if (loaded.length > 0) setActiveId(loaded[0].id)
-      }
-    } catch {
-      // Keep default conversation
-    }
-  }
-
-  const handleNewConversation = () => {
-    const newId = `conv-${Date.now()}`
-    const newConv = {
-      id: newId,
-      title: 'New Task',
-      messages: [],
-    }
-    setConversations((prev) => [newConv, ...prev])
-    setActiveId(newId)
-    setActiveView('chat')
-  }
-
-  const handleSelectConversation = (id) => {
-    setActiveId(id)
-    setActiveView('chat')
-  }
-
-  const handleDeleteConversation = async (id) => {
-    try {
-      await deleteConversationApi(id)
-      setConversations((prev) => prev.filter((c) => c.id !== id))
-      if (activeId === id) {
-        const remaining = conversations.filter((c) => c.id !== id)
-        if (remaining.length > 0) setActiveId(remaining[0].id)
-        else handleNewConversation()
-      }
-    } catch (err) {
-      showToast(`Failed to delete task: ${err.message}`, 'error')
-    }
-  }
-
-  const handleClearAllConversations = async () => {
-    try {
-      await clearAllConversationsApi()
-      const newId = `conv-${Date.now()}`
-      setConversations([{ id: newId, title: 'Current Session', messages: [] }])
-      setActiveId(newId)
-      showToast('All tasks cleared', 'info')
-    } catch (err) {
-      showToast(`Failed to clear tasks: ${err.message}`, 'error')
-    }
-  }
-
-  const handleUnloadModel = async () => {
-    setIsUnloading(true)
-    try {
-      const res = await unloadModel()
-      if (res.success) {
-        showToast('Model unloaded: VRAM freed', 'success')
-      } else {
-        showToast('Unload signal acknowledged', 'info')
-      }
-      refreshHealth()
-    } catch (err) {
-      showToast(`Failed to unload: ${err.message}`, 'error')
-    } finally {
-      setIsUnloading(false)
-    }
-  }
-
-  const handleSendPrompt = async () => {
-    if (!inputPrompt.trim() || isLoading) return
-
-    const prompt = inputPrompt.trim()
-    setInputPrompt('')
+  const handleSendMessage = async (prompt) => {
+    if (!prompt.trim() || isLoading) return
 
     const userMsg = {
       id: `msg-${Date.now()}`,
@@ -394,14 +344,6 @@ export default function App() {
       content: prompt,
       timestamp: Date.now(),
     }
-
-    const taskId = `task-${Date.now()}`
-    activeTaskIdRef.current = taskId
-
-    const controller = new AbortController()
-    abortControllerRef.current = controller
-
-    setIsLoading(true)
 
     setConversations((prev) =>
       prev.map((c) => {
@@ -416,6 +358,38 @@ export default function App() {
         return c
       })
     )
+
+    // Check if the prompt is asking for file organization/cleanup in current folder
+    const lower = prompt.toLowerCase()
+    const isFileOrgIntent =
+      lower.includes('organize') ||
+      lower.includes('group') ||
+      lower.includes('sort') ||
+      lower.includes('cleanup') ||
+      lower.includes('clean up') ||
+      lower.includes('duplicate') ||
+      lower.includes('temporary') ||
+      selectedPaths.size > 0
+
+    if (isFileOrgIntent && currentPath) {
+      setIsLoading(true)
+      try {
+        await handleGeneratePlan(prompt)
+      } catch (err) {
+        showToast(`AI Planning error: ${err.message}`, 'error')
+      } finally {
+        setIsLoading(false)
+      }
+      return
+    }
+
+    // Otherwise, route to general agent loop
+    const taskId = `task-${Date.now()}`
+    activeTaskIdRef.current = taskId
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+
+    setIsLoading(true)
 
     try {
       const result = await executeTaskApi(
@@ -447,12 +421,12 @@ export default function App() {
           c.id === activeId ? { ...c, messages: [...c.messages, agentMsg] } : c
         )
       )
+
       if (result.pending_approval) {
         setPendingApproval({ ...result.pending_approval, conversation_id: activeId })
       }
     } catch (err) {
       if (err.name === 'AbortError') return
-
       const errorMsg = {
         id: `msg-${Date.now() + 1}`,
         role: 'agent',
@@ -473,20 +447,18 @@ export default function App() {
     }
   }
 
-  const handleSaveConfig = async (newCfg) => {
-    try {
-      const res = await updateConfig(newCfg)
-      if (res?.config) setConfig(res.config)
-      refreshHealth()
-      showToast('Settings saved successfully', 'success')
-    } catch (err) {
-      showToast(`Failed to update config: ${err.message}`, 'error')
+  const handleStopTask = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
     }
+    if (activeTaskIdRef.current) {
+      stopTaskApi(activeTaskIdRef.current).catch(() => {})
+    }
+    setIsLoading(false)
   }
 
   const handleApproval = async (approved) => {
     if (!pendingApproval) return
-
     const approval = pendingApproval
     setIsLoading(true)
     setPendingApproval(null)
@@ -508,6 +480,7 @@ export default function App() {
       if (result.pending_approval) {
         setPendingApproval({ ...result.pending_approval, conversation_id: approval.conversation_id })
       }
+      handleRefreshDirectory()
     } catch (err) {
       showToast(`Error processing approval: ${err.message}`, 'error')
     } finally {
@@ -515,159 +488,161 @@ export default function App() {
     }
   }
 
+  const loadSavedConversations = async () => {
+    try {
+      const list = await fetchConversations()
+      if (list && list.length > 0) {
+        const loaded = await Promise.all(
+          list.map(async (c) => {
+            try {
+              const msgs = await fetchMessages(c.id)
+              return {
+                id: c.id,
+                title: c.title,
+                messages: msgs.map((m) => ({
+                  id: m.id,
+                  role: m.role,
+                  content: m.content,
+                  status: m.status,
+                  timestamp: new Date(m.created_at).getTime(),
+                })),
+              }
+            } catch {
+              return { id: c.id, title: c.title, messages: [] }
+            }
+          })
+        )
+        setConversations(loaded)
+        if (loaded.length > 0) setActiveId(loaded[0].id)
+      }
+    } catch {}
+  }
+
+  const handleNewConversation = () => {
+    const newId = `conv-${Date.now()}`
+    const newConv = {
+      id: newId,
+      title: 'New Task',
+      messages: [],
+    }
+    setConversations((prev) => [newConv, ...prev])
+    setActiveId(newId)
+    setPlanPreview(null)
+  }
+
+  const handleUnloadModel = async () => {
+    setIsUnloading(true)
+    try {
+      const res = await unloadModel()
+      if (res.success) {
+        showToast('Model unloaded: RAM/VRAM freed', 'success')
+      } else {
+        showToast('Unload signal acknowledged', 'info')
+      }
+      refreshHealth()
+    } catch (err) {
+      showToast(`Failed to unload: ${err.message}`, 'error')
+    } finally {
+      setIsUnloading(false)
+    }
+  }
+
+  const handleSaveConfig = async (newCfg) => {
+    try {
+      const res = await updateConfig(newCfg)
+      if (res?.config) setConfig(res.config)
+      refreshHealth()
+      showToast('Settings saved successfully', 'success')
+    } catch (err) {
+      showToast(`Failed to update config: ${err.message}`, 'error')
+    }
+  }
+
   return (
-    <div className="app-container">
+    <div className={`app-root-shell ${isDragging ? 'resizing-active' : ''}`}>
       {/* Toast Notification */}
       {toastMessage && (
         <div className={`app-toast animate-slide-down ${toastMessage.type}`}>
-          {toastMessage.type === 'success' && <Check size={16} />}
-          {toastMessage.type === 'error' && <AlertCircle size={16} />}
-          {toastMessage.type === 'info' && <Zap size={16} />}
+          {toastMessage.type === 'success' && <Check size={15} />}
+          {toastMessage.type === 'error' && <AlertCircle size={15} />}
+          {toastMessage.type === 'info' && <Zap size={15} />}
           <span>{toastMessage.text}</span>
         </div>
       )}
 
-      {/* Left Sidebar (Locations, Drives, Tasks, Settings) */}
-      <Sidebar
-        activeView={activeView}
-        onSwitchView={setActiveView}
-        locations={locations}
-        currentPath={currentPath}
-        onNavigate={(p) => loadDirectory(p)}
-        onUndo={handleUndo}
-        canUndo={canUndo}
-        conversations={conversations}
-        activeId={activeId}
-        onSelectConversation={handleSelectConversation}
-        onNewConversation={handleNewConversation}
-        onDeleteConversation={handleDeleteConversation}
-        onClearAllConversations={handleClearAllConversations}
-        onOpenSettings={() => setIsSettingsOpen(true)}
+      {/* 1. Compact Application Header */}
+      <CompactHeader
         health={health}
+        onOpenSettings={() => setIsSettingsOpen(true)}
         onUnloadModel={handleUnloadModel}
         isUnloading={isUnloading}
+        canUndo={canUndo}
+        onUndo={handleUndo}
       />
 
-      {/* Main Workspace Area */}
-      {activeView === 'explorer' ? (
-        <main className="main-explorer-area">
-          {/* File Browser Grid/List */}
-          <FileBrowser
+      {/* 2. Horizontal 60:40 Split Workspace */}
+      <main className="app-workspace-split">
+        {/* Left Panel (~60%): File Explorer */}
+        <div
+          className="workspace-left-panel"
+          style={{ width: `${splitPercent}%` }}
+        >
+          <FileExplorer
             currentPath={currentPath}
             browseData={browseData}
+            locations={locations}
             isLoading={isBrowsing}
             onNavigate={(p) => loadDirectory(p)}
             onRefresh={handleRefreshDirectory}
             onAction={handleExplorerAction}
             onPreview={handlePreviewFile}
-            onSendToAi={(promptText) => handleGeneratePlan(promptText)}
+            onAskAiAboutSelection={(prompt) => handleSendMessage(prompt)}
             onScanDuplicates={handleScanDuplicates}
             onAnalyzeStorage={handleAnalyzeStorage}
+            selectedPaths={selectedPaths}
+            setSelectedPaths={setSelectedPaths}
           />
+        </div>
 
-          {/* AI Command & Structured Plan Decision Panel */}
-          <AiCommandPanel
+        {/* Draggable Vertical Divider */}
+        <div
+          className={`workspace-split-resizer ${isDragging ? 'dragging' : ''}`}
+          onMouseDown={handleDividerMouseDown}
+          onDoubleClick={handleResetDivider}
+          title="Drag to resize panels (Double click to reset to 60:40)"
+        >
+          <div className="resizer-handle-grip" />
+        </div>
+
+        {/* Right Panel (~40%): AI Chat Assistant */}
+        <div
+          className="workspace-right-panel"
+          style={{ width: `${100 - splitPercent}%` }}
+        >
+          <AiChatAssistant
             currentPath={currentPath}
-            onGeneratePlan={handleGeneratePlan}
-            onExecutePlan={handleExecutePlan}
-            onUndo={handleUndo}
-            isGeneratingPlan={isGeneratingPlan}
-            isExecutingPlan={isExecutingPlan}
+            selectedPaths={selectedPaths}
+            onClearSelectedPaths={() => setSelectedPaths(new Set())}
+            conversations={conversations}
+            activeId={activeId}
+            onSelectConversation={setActiveId}
+            onNewConversation={handleNewConversation}
+            onClearAllConversations={() => setConversations([{ id: `conv-${Date.now()}`, title: 'Current Session', messages: [] }])}
+            messages={activeConv?.messages || []}
+            onSendMessage={handleSendMessage}
+            isLoading={isLoading || isGeneratingPlan}
+            onStopTask={handleStopTask}
+            health={health}
             planPreview={planPreview}
+            onExecutePlan={handleExecutePlan}
             onClearPlan={() => setPlanPreview(null)}
+            isExecutingPlan={isExecutingPlan}
             executionResult={executionResult}
+            canUndo={canUndo}
+            onUndo={handleUndo}
           />
-        </main>
-      ) : (
-        /* Traditional Chat & Task History Area */
-        <main className="main-chat-area">
-          <header className="chat-header">
-            <div className="chat-header-title-wrap">
-              <h2 className="chat-header-title">
-                {activeConv?.title || 'Smart Manager Tasks'}
-              </h2>
-            </div>
-            <div className="header-actions-group">
-              <div className="chat-header-model-pill" aria-live="polite">
-                <span className="pulse-dot" aria-hidden="true" />
-                <span className="chat-header-model-label">
-                  {health?.active_provider_label || health?.active_model || 'Connecting...'}
-                </span>
-              </div>
-            </div>
-          </header>
-
-          {isBusy && <div className="shimmer-progress-bar animate-shimmer" />}
-
-          <div className="messages-stream-container">
-            {activeConv?.messages.length === 0 ? (
-              <div className="welcome-screen animate-fade-in">
-                <div className="welcome-hero-logo animate-bounce-subtle">
-                  {hasWelcomeLogoError ? (
-                    <span className="welcome-logo-fallback" aria-label="Smart Manager">
-                      <Sparkles size={32} aria-hidden="true" />
-                    </span>
-                  ) : (
-                    <img
-                      src={logoAsset}
-                      alt="Smart Manager"
-                      className="welcome-logo-img"
-                      onError={() => setHasWelcomeLogoError(true)}
-                    />
-                  )}
-                </div>
-                <h2 className="welcome-title">AI File Task Console</h2>
-                <p className="welcome-subtitle">
-                  Describe a task to run through the autonomous agent loop.
-                </p>
-              </div>
-            ) : (
-              activeConv.messages.map((m) => <MessageBubble key={m.id} message={m} />)
-            )}
-
-            {isBusy && (
-              <div className="thinking-card-wrapper animate-slide-up">
-                <div className="thinking-card">
-                  <div className="thinking-spinner-ring">
-                    <Loader2 size={18} className="spin text-accent" />
-                  </div>
-                  <div className="thinking-text-group">
-                    <div className="thinking-heading">Executing Action</div>
-                    <div className="thinking-subtext">Operating on local Windows system...</div>
-                  </div>
-                </div>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-
-          <div className="chat-input-container">
-            <div className="chat-input-card">
-              <textarea
-                className="chat-textarea"
-                rows={1}
-                placeholder="Type a general agent command..."
-                value={inputPrompt}
-                onChange={(e) => setInputPrompt(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
-                    handleSendPrompt()
-                  }
-                }}
-                disabled={isLoading}
-              />
-              <button
-                className="btn-send-message"
-                onClick={handleSendPrompt}
-                disabled={!inputPrompt.trim() || isLoading}
-              >
-                <Send size={15} />
-              </button>
-            </div>
-          </div>
-        </main>
-      )}
+        </div>
+      </main>
 
       {/* Modals */}
       {previewData && (

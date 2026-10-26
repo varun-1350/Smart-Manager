@@ -150,9 +150,6 @@ export default function FileBrowser({
   const handleContextMenu = (e, item) => {
     e.preventDefault()
     e.stopPropagation()
-    if (!selectedPaths.has(item.path)) {
-      setSelectedPaths(new Set([item.path]))
-    }
     setContextMenu({
       x: Math.min(e.clientX, window.innerWidth - 220),
       y: Math.min(e.clientY, window.innerHeight - 280),

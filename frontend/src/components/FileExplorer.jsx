@@ -66,25 +66,15 @@ export default function FileExplorer({
   const [renameValue, setRenameValue] = useState('')
   const [focusedPath, setFocusedPath] = useState(null)
 
-  // Close context menu on outside click or Escape key
+  // Close context menu on outside click
   useEffect(() => {
     const handleOutsideClick = (e) => {
       if (contextMenu && !e.target.closest('.explorer-context-menu')) {
         setContextMenu(null)
       }
     }
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        setContextMenu(null)
-        setRenamingItem(null)
-      }
-    }
     window.addEventListener('click', handleOutsideClick)
-    window.addEventListener('keydown', handleKeyDown)
-    return () => {
-      window.removeEventListener('click', handleOutsideClick)
-      window.removeEventListener('keydown', handleKeyDown)
-    }
+    return () => window.removeEventListener('click', handleOutsideClick)
   }, [contextMenu])
 
   // Clear search on path change
@@ -96,31 +86,6 @@ export default function FileExplorer({
   }, [currentPath])
 
   const entries = browseData?.entries || []
-
-  // Format modified date/time accurately for both files and folders
-  const formatModified = (item) => {
-    if (item.modified_formatted) return item.modified_formatted
-    if (item.modified) {
-      try {
-        const d = new Date(item.modified)
-        if (!isNaN(d.getTime())) {
-          return (
-            d.toLocaleDateString(undefined, {
-              year: 'numeric',
-              month: '2-digit',
-              day: '2-digit',
-            }) +
-            ' ' +
-            d.toLocaleTimeString(undefined, {
-              hour: '2-digit',
-              minute: '2-digit',
-            })
-          )
-        }
-      } catch {}
-    }
-    return '-'
-  }
 
   // Sorting and Filtering
   const processedEntries = useMemo(() => {
@@ -148,19 +113,7 @@ export default function FileExplorer({
       } else if (sortField === 'size') {
         comp = (a.size_bytes || 0) - (b.size_bytes || 0)
       } else if (sortField === 'modified') {
-        const timeA =
-          typeof a.modified_timestamp === 'number'
-            ? a.modified_timestamp
-            : a.modified
-            ? new Date(a.modified).getTime()
-            : 0
-        const timeB =
-          typeof b.modified_timestamp === 'number'
-            ? b.modified_timestamp
-            : b.modified
-            ? new Date(b.modified).getTime()
-            : 0
-        comp = timeA - timeB
+        comp = (a.modified_timestamp || 0) - (b.modified_timestamp || 0)
       } else if (sortField === 'type') {
         const catA = a.is_dir ? 'Folder' : a.category || a.extension || ''
         const catB = b.is_dir ? 'Folder' : b.category || b.extension || ''
@@ -182,32 +135,9 @@ export default function FileExplorer({
     }
   }
 
-  // Selected items analysis for bottom status bar
-  const selectedItems = useMemo(() => {
-    if (selectedPaths.size === 0) return []
-    return entries.filter((e) => selectedPaths.has(e.path))
-  }, [entries, selectedPaths])
-
-  const selectedTotalSizeFormatted = useMemo(() => {
-    let totalBytes = 0
-    let hasKnownSize = false
-    for (const item of selectedItems) {
-      if (!item.is_dir && typeof item.size_bytes === 'number') {
-        totalBytes += item.size_bytes
-        hasKnownSize = true
-      }
-    }
-    if (!hasKnownSize) return null
-    if (totalBytes < 1024) return `${totalBytes} B`
-    if (totalBytes < 1024 * 1024) return `${(totalBytes / 1024).toFixed(1)} KB`
-    if (totalBytes < 1024 * 1024 * 1024) return `${(totalBytes / (1024 * 1024)).toFixed(1)} MB`
-    return `${(totalBytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
-  }, [selectedItems])
-
-  // Multi-selection: immediately dismiss context menu when clicking checkbox
+  // Multi-selection
   const toggleSelect = (path, e) => {
     e?.stopPropagation()
-    setContextMenu(null)
     setSelectedPaths((prev) => {
       const next = new Set(prev)
       if (next.has(path)) next.delete(path)
@@ -217,7 +147,6 @@ export default function FileExplorer({
   }
 
   const selectAll = () => {
-    setContextMenu(null)
     if (selectedPaths.size === processedEntries.length && processedEntries.length > 0) {
       setSelectedPaths(new Set())
     } else {
@@ -226,7 +155,6 @@ export default function FileExplorer({
   }
 
   const handleRowClick = (item, e) => {
-    if (contextMenu) setContextMenu(null)
     setFocusedPath(item.path)
   }
 
@@ -545,7 +473,60 @@ export default function FileExplorer({
           </form>
         )}
 
+        {/* Floating Contextual Selection Bar */}
+        {selectedPaths.size > 0 && (
+          <div className="explorer-selection-bar">
+            <span className="selection-count-badge">
+              {selectedPaths.size} {selectedPaths.size === 1 ? 'item' : 'items'} selected
+            </span>
 
+            <div className="selection-actions-wrap">
+              <button
+                type="button"
+                className="selection-btn selection-btn-ai"
+                onClick={() => {
+                  const items = Array.from(selectedPaths).map((p) => p.split('\\').pop()).join(', ')
+                  onAskAiAboutSelection?.(`Help me organize or clean up these selected files: ${items}`)
+                }}
+                title="Ask AI Assistant about selected files"
+              >
+                <Sparkles size={13} />
+                <span>Ask AI</span>
+              </button>
+
+              {selectedPaths.size === 1 && (
+                <button
+                  type="button"
+                  className="selection-btn"
+                  onClick={() => onPreview(Array.from(selectedPaths)[0])}
+                  title="Preview file contents"
+                >
+                  <Eye size={13} />
+                  <span>Preview</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                className="selection-btn selection-btn-trash"
+                onClick={handleBulkTrash}
+                title="Move selected items to recoverable trash"
+              >
+                <Trash2 size={13} />
+                <span>Move to Trash</span>
+              </button>
+
+              <button
+                type="button"
+                className="selection-btn selection-btn-clear"
+                onClick={() => setSelectedPaths(new Set())}
+                title="Clear selection"
+              >
+                Deselect
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* File Listing Container */}
         <div className="explorer-listing-viewport">
@@ -661,7 +642,7 @@ export default function FileExplorer({
                         </td>
 
                         <td className="td-date">
-                          <span className="meta-text">{formatModified(item)}</span>
+                          <span className="meta-text">{item.modified_formatted || '-'}</span>
                         </td>
 
                         <td className="td-type">
@@ -718,65 +699,16 @@ export default function FileExplorer({
           )}
         </div>
 
-        {/* Footer Status Bar with Selection Details */}
+        {/* Footer Status Bar */}
         <footer className="explorer-status-bar">
           <div className="status-bar-left">
-            <span className="status-total-count">
-              {processedEntries.length} {processedEntries.length === 1 ? 'item' : 'items'}
-            </span>
+            <span>{processedEntries.length} items</span>
             {selectedPaths.size > 0 && (
               <span className="status-selected-count">
-                • {selectedPaths.size} {selectedPaths.size === 1 ? 'item' : 'items'} selected
-                {selectedTotalSizeFormatted ? ` (${selectedTotalSizeFormatted})` : ''}
+                • {selectedPaths.size} selected
               </span>
             )}
           </div>
-
-          {selectedPaths.size > 0 && (
-            <div className="status-bar-selection-actions">
-              <button
-                type="button"
-                className="status-selection-btn status-btn-ai"
-                onClick={() => {
-                  const items = Array.from(selectedPaths).map((p) => p.split('\\').pop()).join(', ')
-                  onAskAiAboutSelection?.(`Help me organize or manage these selected files: ${items}`)
-                }}
-                title="Ask AI Assistant about selected files"
-              >
-                <Sparkles size={12} />
-                <span>Ask AI</span>
-              </button>
-              {selectedPaths.size === 1 && !selectedItems[0]?.is_dir && (
-                <button
-                  type="button"
-                  className="status-selection-btn"
-                  onClick={() => onPreview(Array.from(selectedPaths)[0])}
-                  title="Preview file contents"
-                >
-                  <Eye size={12} />
-                  <span>Preview</span>
-                </button>
-              )}
-              <button
-                type="button"
-                className="status-selection-btn status-btn-trash"
-                onClick={handleBulkTrash}
-                title="Move selected items to recoverable trash"
-              >
-                <Trash2 size={12} />
-                <span>Move to Trash</span>
-              </button>
-              <button
-                type="button"
-                className="status-selection-btn status-btn-clear"
-                onClick={() => setSelectedPaths(new Set())}
-                title="Clear selection"
-              >
-                Deselect
-              </button>
-            </div>
-          )}
-
           <div className="status-bar-right" title={currentPath}>
             <span>{currentPath}</span>
           </div>
@@ -788,11 +720,6 @@ export default function FileExplorer({
         <div
           className="explorer-context-menu"
           style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}
-          onClick={(e) => e.stopPropagation()}
-          onContextMenu={(e) => {
-            e.preventDefault()
-            e.stopPropagation()
-          }}
         >
           <div className="context-menu-header">
             <span className="context-target-name">{contextMenu.item.name}</span>

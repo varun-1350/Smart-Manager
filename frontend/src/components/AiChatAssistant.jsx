@@ -56,11 +56,23 @@ export default function AiChatAssistant({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, planPreview, isLoading, isExecutingPlan])
 
+  // Suggested starting chips
+  const suggestedPrompts = [
+    'Organize this folder by file type',
+    'Find duplicate files in this folder',
+    'Find large files taking up space',
+    'Clean up temporary and cache files',
+  ]
+
   const handleSubmit = (e) => {
     e?.preventDefault()
     if (!inputPrompt.trim() || isLoading || isExecutingPlan) return
     onSendMessage(inputPrompt.trim())
     setInputPrompt('')
+  }
+
+  const handlePromptChipClick = (prompt) => {
+    onSendMessage(prompt)
   }
 
   // Adjust textarea height dynamically
@@ -105,15 +117,33 @@ export default function AiChatAssistant({
       {/* 2. Scrollable Conversation Thread */}
       <div className="assistant-thread-viewport">
         {messages.length === 0 && !planPreview ? (
-          /* Clean Professional Empty State without Suggested Chips */
+          /* Empty State with Compact Suggested Prompts */
           <div className="assistant-empty-state">
             <div className="empty-state-icon">
               <Bot size={28} />
             </div>
             <h3 className="empty-state-title">How can I help with your files?</h3>
             <p className="empty-state-subtitle">
-              Ask questions, summarize, search, or request file operations in <strong>{activeFolderName}</strong> using natural language.
+              Ask questions or manage files in <strong>{activeFolderName}</strong> using natural language.
             </p>
+
+            <div className="suggested-prompts-container">
+              <span className="suggested-label">Suggested tasks:</span>
+              <div className="suggested-chips-list">
+                {suggestedPrompts.map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    className="suggested-prompt-chip"
+                    onClick={() => handlePromptChipClick(p)}
+                    disabled={isLoading}
+                  >
+                    <Sparkles size={12} className="chip-sparkle" />
+                    <span>{p}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         ) : (
           /* Messages List */

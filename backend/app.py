@@ -1,4 +1,3 @@
-import time
 import logging
 import sqlite3
 from typing import Dict, Any, List, Optional
@@ -22,7 +21,6 @@ from security.permissions import SecurityPolicy
 from execution.filesystem import FilesystemOperations, resolve_system_path
 from ai import ProviderManager, OllamaProvider, OnlineProvider
 from agent.model import OllamaClient, FilePlanPreview, FileActionItem
-from agent.planner import Planner
 from agent.runtime import AgentRuntime
 
 logging.basicConfig(level=logging.INFO)
@@ -577,49 +575,15 @@ class ExplorerPlanRequest(BaseModel):
 
 @app.post("/api/explorer/plan")
 async def generate_explorer_plan(req: ExplorerPlanRequest):
-    req_id = f"plan-{uuid4().hex[:8]}"
-    start_time = time.perf_counter()
-    logger.info(f"[{req_id}] Explorer plan requested: path='{req.folder_path}', instruction='{req.instruction[:80]}'")
-
-    # Validate target directory
-    target = resolve_system_path(req.folder_path)
-    if not target.exists():
-        logger.warning(f"[{req_id}] Folder not found: {req.folder_path}")
-        raise HTTPException(status_code=404, detail=f"Directory does not exist: {req.folder_path}")
-    if not target.is_dir():
-        logger.warning(f"[{req_id}] Target is not a directory: {req.folder_path}")
-        raise HTTPException(status_code=400, detail=f"Target path is not a directory: {req.folder_path}")
-
-    # Resolve active AI provider dynamically
     try:
-        active_provider, provider_label = await provider_manager.get_active_provider()
-    except Exception as e:
-        logger.error(f"[{req_id}] Failed to get active provider: {e}")
-        raise HTTPException(status_code=503, detail=f"AI Provider unavailable: {str(e)}")
-
-    if not provider_manager.provider_available_for_task(provider_label):
-        logger.warning(f"[{req_id}] Provider '{provider_label}' unavailable due to circuit breaker")
-        raise HTTPException(
-            status_code=503,
-            detail=f"AI Provider '{provider_label}' is temporarily unavailable. Please verify API key or settings.",
-        )
-
-    try:
-        planner = Planner(active_provider)
-        runtime.planner = planner
-        plan = await planner.plan_file_batch_task(
-            folder_path=str(target),
+        plan = await runtime.planner.plan_file_batch_task(
+            folder_path=req.folder_path,
             instruction=req.instruction,
         )
-        elapsed_ms = (time.perf_counter() - start_time) * 1000
-        logger.info(f"[{req_id}] Explorer plan generated in {elapsed_ms:.1f}ms: {len(plan.actions)} action(s)")
         return plan.model_dump()
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        elapsed_ms = (time.perf_counter() - start_time) * 1000
-        logger.exception(f"[{req_id}] Error generating explorer plan in {elapsed_ms:.1f}ms")
-        raise HTTPException(status_code=500, detail=f"Plan generation failed: {str(e)}")
+        logger.exception("Error generating plan")
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 class ExplorerExecutePlanRequest(BaseModel):
@@ -787,10 +751,6 @@ async def execute_task(req: TaskExecuteRequest):
         raise HTTPException(status_code=409, detail="Task identifier already exists.")
     except Exception as e:
         logger.exception("Error executing task")
-        try:
-            TaskRepository.transition(req.task_id, "failed", error=str(e))
-        except Exception:
-            pass
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         # Minimal RAM guarantee: unload model from GPU VRAM and process RAM when idle

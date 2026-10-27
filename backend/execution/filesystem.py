@@ -508,16 +508,13 @@ class FilesystemOperations:
                     stat = item.stat()
                     is_dir = item.is_dir()
                     size = stat.st_size if not is_dir else None
-                    dt = datetime.fromtimestamp(stat.st_mtime)
                     entries.append({
                         "name": item.name,
                         "path": str(item.resolve()),
                         "is_dir": is_dir,
                         "size_bytes": size,
                         "size_formatted": FilesystemOperations.format_size(size),
-                        "modified": dt.isoformat(),
-                        "modified_formatted": dt.strftime("%Y-%m-%d %H:%M"),
-                        "modified_timestamp": stat.st_mtime,
+                        "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
                         "mtime_raw": stat.st_mtime,
                         "extension": item.suffix.lower().lstrip(".") if not is_dir else "",
                         "category": FilesystemOperations.get_file_category(item.name, is_dir),

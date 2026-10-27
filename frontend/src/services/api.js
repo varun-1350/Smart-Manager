@@ -318,15 +318,12 @@ export async function fetchStorageAnalysis(folder) {
   return await res.json()
 }
 
-export async function generateExplorerPlan(folderPath, instruction, signal = null) {
-  const fetchOptions = {
+export async function generateExplorerPlan(folderPath, instruction) {
+  const res = await apiFetch(`${API_BASE}/explorer/plan`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ folder_path: folderPath, instruction }),
-  }
-  if (signal) fetchOptions.signal = signal
-
-  const res = await apiFetch(`${API_BASE}/explorer/plan`, fetchOptions)
+  })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.detail || `HTTP ${res.status}`)
@@ -334,15 +331,12 @@ export async function generateExplorerPlan(folderPath, instruction, signal = nul
   return await res.json()
 }
 
-export async function executeExplorerPlan(batchId, actions, signal = null) {
-  const fetchOptions = {
+export async function executeExplorerPlan(batchId, actions) {
+  const res = await apiFetch(`${API_BASE}/explorer/execute-plan`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ batch_id: batchId, actions }),
-  }
-  if (signal) fetchOptions.signal = signal
-
-  const res = await apiFetch(`${API_BASE}/explorer/execute-plan`, fetchOptions)
+  })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.detail || `HTTP ${res.status}`)

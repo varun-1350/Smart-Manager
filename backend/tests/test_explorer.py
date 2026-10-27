@@ -41,19 +41,6 @@ def test_browse_directory(temp_workspace):
     # Folders should be first
     assert res["entries"][0]["is_dir"] is True
 
-    # Date Modified assertions for folders and files
-    folder_entry = next(e for e in res["entries"] if e["name"] == "empty_dir")
-    assert folder_entry["is_dir"] is True
-    assert folder_entry.get("modified") is not None
-    assert folder_entry.get("modified_formatted") is not None
-    assert isinstance(folder_entry.get("modified_timestamp"), (int, float))
-
-    file_entry = next(e for e in res["entries"] if e["name"] == "notes.txt")
-    assert file_entry["is_dir"] is False
-    assert file_entry.get("modified") is not None
-    assert file_entry.get("modified_formatted") is not None
-    assert isinstance(file_entry.get("modified_timestamp"), (int, float))
-
     # Categories test
     cat_map = {e["name"]: e["category"] for e in res["entries"]}
     assert cat_map["doc1.pdf"] == "documents"
@@ -148,7 +135,7 @@ async def test_explorer_endpoints(temp_workspace):
         assert preview_res.status_code == 200
         assert preview_res.json()["category"] == "text"
 
-        # 4. Plan organization - valid folder
+        # 4. Plan organization
         plan_res = await c.post("/api/explorer/plan", json={
             "folder_path": str(temp_workspace),
             "instruction": "Organize files by file type",
@@ -158,62 +145,7 @@ async def test_explorer_endpoints(temp_workspace):
         assert "actions" in plan_data
         assert len(plan_data["actions"]) >= 1
 
-        # 4b. Plan organization - nonexistent directory (404)
-        bad_plan_res = await c.post("/api/explorer/plan", json={
-            "folder_path": str(temp_workspace / "does_not_exist_404"),
-            "instruction": "Organize files",
-        })
-        assert bad_plan_res.status_code == 404
-
-        # 4c. Plan organization - file instead of directory (400)
-        file_plan_res = await c.post("/api/explorer/plan", json={
-            "folder_path": str(temp_workspace / "notes.txt"),
-            "instruction": "Organize files",
-        })
-        assert file_plan_res.status_code == 400
-
         # 5. Duplicates
         dup_res = await c.get(f"/api/explorer/duplicates?folder={temp_workspace}&min_size=5")
         assert dup_res.status_code == 200
         assert dup_res.json()["duplicate_groups_count"] >= 1
-
-
-@pytest.mark.asyncio
-async def test_plan_uses_active_provider(temp_workspace):
-    from unittest.mock import AsyncMock, patch, MagicMock
-    from agent.model import FilePlanPreview, FileActionItem
-
-    mock_provider = MagicMock()
-    mock_provider.model_name = "test-model"
-    mock_plan = FilePlanPreview(
-        summary="Mocked AI plan for tests",
-        target_folder=str(temp_workspace),
-        actions=[
-            FileActionItem(
-                id="act-1",
-                tool="fs_move_file",
-                source=str(temp_workspace / "notes.txt"),
-                destination=str(temp_workspace / "Text" / "notes.txt"),
-                reason="Organize notes",
-                risk_level="low",
-                requires_approval=True,
-            )
-        ],
-        skipped_files=[],
-        conflicts=[],
-    )
-    mock_provider.generate_structured = AsyncMock(return_value=mock_plan)
-
-    with patch("app.provider_manager.get_active_provider", new_callable=AsyncMock) as mock_get_active:
-        mock_get_active.return_value = (mock_provider, "Online: test-model")
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as c:
-            res = await c.post("/api/explorer/plan", json={
-                "folder_path": str(temp_workspace),
-                "instruction": "Custom organization logic for notes",
-            })
-            assert res.status_code == 200
-            data = res.json()
-            assert data["summary"] == "Mocked AI plan for tests"
-            assert len(data["actions"]) == 1
-            assert mock_get_active.call_count >= 1

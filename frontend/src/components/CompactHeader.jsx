@@ -26,12 +26,6 @@ export default function CompactHeader({
 
   const modelLabel = health?.active_model || ''
   const isHealthy = health?.status === 'ok' || health?.status === 'degraded'
-  const isOllamaActive =
-    Boolean(health) &&
-    health.provider_mode !== 'online' &&
-    (health.provider_mode === 'local' ||
-      health.active_provider === 'ollama' ||
-      (health.active_provider_label && health.active_provider_label.toLowerCase().includes('ollama')))
 
   return (
     <header className="compact-app-header">
@@ -78,23 +72,21 @@ export default function CompactHeader({
           </button>
         )}
 
-        {/* Free Memory / Unload Model Button (Ollama Local Only) */}
-        {isOllamaActive && (
-          <button
-            type="button"
-            className="header-btn header-btn-unload"
-            onClick={onUnloadModel}
-            disabled={isUnloading}
-            title="Unload AI model weights to free RAM/VRAM"
-          >
-            {isUnloading ? (
-              <Loader2 size={14} className="spinning" />
-            ) : (
-              <Cpu size={14} />
-            )}
-            <span>Free Memory</span>
-          </button>
-        )}
+        {/* Free Memory / Unload Model Button */}
+        <button
+          type="button"
+          className="header-btn header-btn-unload"
+          onClick={onUnloadModel}
+          disabled={isUnloading}
+          title="Unload AI model weights to free RAM/VRAM"
+        >
+          {isUnloading ? (
+            <Loader2 size={14} className="spinning" />
+          ) : (
+            <Cpu size={14} />
+          )}
+          <span>Free Memory</span>
+        </button>
 
         {/* Settings Button */}
         <button

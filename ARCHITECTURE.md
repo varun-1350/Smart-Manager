@@ -1,0 +1,1 @@
+Input → Validation → NLP → Planner → Security → Execution → Verification

@@ -1,69 +1,60 @@
+from __future__ import annotations
 
 import json
 from pathlib import Path
 
 import joblib
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report
-from sklearn.model_selection import train_test_split
-from sklearn.pipeline import Pipeline
+
+from backend.nlp.confidence import MUTATING_INTENTS
+from backend.nlp.entity_extractor import mask_entities
+from backend.nlp.intent_classifier import MODEL_PATH, train_model
+
+HERE = Path(__file__).parent
+TRAIN_PATH = HERE / "intents.json"
+EVAL_PATH = HERE / "eval_set.json"
 
 
-HERE = Path(__file__).resolve().parent
-DATASET_PATH = HERE / "intents.json"
-MODEL_PATH = HERE.parent / "intent_model.joblib"
+def load_training_data(path: Path = TRAIN_PATH) -> tuple[list[str], list[str]]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    texts, labels = [], []
+    for intent, examples in data.items():
+        for example in examples:
+            texts.append(example)
+            labels.append(intent)
+    return texts, labels
 
 
-def main():
-    with DATASET_PATH.open("r", encoding="utf-8") as file:
-        examples = json.load(file)
+def load_eval_data(path: Path = EVAL_PATH) -> tuple[list[str], list[str]]:
+    rows = json.loads(path.read_text(encoding="utf-8"))
+    return [r["text"] for r in rows], [r["intent"] for r in rows]
 
-    texts = [item["text"] for item in examples]
-    labels = [item["intent"] for item in examples]
 
-    # Keep examples from every intent in both splits.
-    X_train, X_test, y_train, y_test = train_test_split(
-        texts,
-        labels,
-        test_size=0.25,
-        random_state=42,
-        stratify=labels,
-    )
+def main() -> None:
+    train_x, train_y = load_training_data()
+    eval_x, eval_y = load_eval_data()
 
-    model = Pipeline([
-        (
-            "tfidf",
-            TfidfVectorizer(
-                lowercase=True,
-                ngram_range=(1, 2),
-                strip_accents="unicode",
-            ),
-        ),
-        (
-            "classifier",
-            LogisticRegression(
-                max_iter=1000,
-                class_weight="balanced",
-                random_state=42,
-            ),
-        ),
-    ])
+    leaked = set(t.casefold() for t in train_x) & set(t.casefold() for t in eval_x)
+    if leaked:
+        print(f"WARNING: {len(leaked)} eval sentences also appear in training: {sorted(leaked)}")
 
-    model.fit(X_train, y_train)
-    predictions = model.predict(X_test)
+    model = train_model(train_x, train_y)
+    predicted = model.predict([mask_entities(t) for t in eval_x])
 
-    print(f"Training examples: {len(X_train)}")
-    print(f"Test examples: {len(X_test)}")
-    print("\nHeld-out classification report:")
-    print(classification_report(
-        y_test,
-        predictions,
-        zero_division=0,
-    ))
+    print(f"Training examples: {len(train_x)}   Eval examples: {len(eval_x)}\n")
+    print(classification_report(eval_y, predicted, zero_division=0))
 
+    print("Dangerous errors (a file-changing intent predicted when it should NOT be):")
+    bad = [(t, y, p) for t, y, p in zip(eval_x, eval_y, predicted)
+           if p in MUTATING_INTENTS and p != y]
+    for text, true, pred in bad:
+        print(f"  '{text}'  true={true}  predicted={pred}")
+    if not bad:
+        print("  none")
+
+    MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(model, MODEL_PATH)
-    print(f"\nModel saved to: {MODEL_PATH}")
+    print(f"\nSaved model to {MODEL_PATH}")
 
 
 if __name__ == "__main__":

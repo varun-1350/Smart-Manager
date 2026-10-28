@@ -25,6 +25,7 @@ class TaskCheck:
     deferred: bool = False                           # some targets come from earlier tasks
     problems: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    conflicts: list[str] = field(default_factory=list)   # would overwrite something: blocks approval
 
     @property
     def ok(self) -> bool:
@@ -81,24 +82,36 @@ def _folder_spec(text: str) -> dict:
         else {"name": text}
 
 
-def _resolve_targets(task: Task, c: TaskCheck, policy: PathPolicy) -> list[Path]:
+def _resolve_targets(task: Task, c: TaskCheck, policy: PathPolicy,
+                     concrete: dict[str, list[Path]]) -> list[Path]:
+    mutating = task.action in MUTATING
     out: list[Path] = []
     for item in _items(task):
+        found: list[Path] = []
         if "from_task" in item:
-            c.deferred = True               # decided at run time; checked via check_resolved
-            continue
-        try:
-            path = policy.resolve_existing(item, mutating=task.action in MUTATING)
-        except SecurityError as exc:
-            c.problems.append(str(exc))
-            continue
-        c.problems += action_rules(policy, task.action, path)
-        c.paths.append(str(path))
-        out.append(path)
+            picked = concrete.get(task.task_id)
+            if picked is None:
+                c.deferred = True       # decided at run time; checked via check_resolved
+                continue
+            for raw in picked:
+                try:
+                    found.append(policy.check(raw, mutating=mutating, must_exist=True))
+                except SecurityError as exc:
+                    c.problems.append(str(exc))
+        else:
+            try:
+                found.append(policy.resolve_existing(item, mutating=mutating))
+            except SecurityError as exc:
+                c.problems.append(str(exc))
+        for path in found:
+            c.problems += action_rules(policy, task.action, path)
+            c.paths.append(str(path))
+            out.append(path)
     return out
 
 
-def _check_task(task: Task, c: TaskCheck, policy: PathPolicy, planned: dict[str, Path]) -> None:
+def _check_task(task: Task, c: TaskCheck, policy: PathPolicy, planned: dict[str, Path],
+                concrete: dict[str, list[Path]]) -> None:
     a, p, cfg = task.action, task.parameters, policy.config
 
     if a in ("search_files", "list_files"):
@@ -117,7 +130,7 @@ def _check_task(task: Task, c: TaskCheck, policy: PathPolicy, planned: dict[str,
             planned[norm(path)] = path
         return
 
-    targets = _resolve_targets(task, c, policy)
+    targets = _resolve_targets(task, c, policy, concrete)
 
     if a == "edit_text_file":
         for key in ("text", "old_text", "new_text"):
@@ -133,8 +146,9 @@ def _check_task(task: Task, c: TaskCheck, policy: PathPolicy, planned: dict[str,
             elif same_path(t.parent, dest):
                 c.warnings.append(f"'{t.name}' is already in that folder.")
             elif (dest / t.name).exists():
-                c.warnings.append(f"'{t.name}' already exists in '{dest}'. "
-                                  "This needs a decision before it runs.")
+                msg = f"'{t.name}' already exists in '{dest}'."
+                c.warnings.append(msg + " This needs a decision before it runs.")
+                c.conflicts.append(msg)
 
     elif a == "rename_file":
         new = check_plain_name(p["new_name"], "new name")
@@ -147,7 +161,25 @@ def _check_task(task: Task, c: TaskCheck, policy: PathPolicy, planned: dict[str,
             c.destination = str(new_path)
 
 
-def preflight(plan: ExecutionPlan, policy: PathPolicy) -> PreflightReport:
+def preflight(plan: ExecutionPlan, policy: PathPolicy,
+              concrete: dict[str, list[Path]] | None = None) -> PreflightReport:
+    """Check every task against the path and action rules. Never changes anything.
+    `concrete` maps task_id -> the real files its reference resolved to (from a search).
+    Without it, those targets stay deferred. Raises PlanningError if the plan is malformed."""
+    concrete = concrete or {}
+    order = validate_plan(plan)
+    by_id = {t.task_id: t for t in plan.tasks}
+    planned: dict[str, Path] = {}          # folders that earlier tasks will create
+    checks: list[TaskCheck] = []
+    for tid in order:
+        task = by_id[tid]
+        c = TaskCheck(task.task_id, task.action)
+        try:
+            _check_task(task, c, policy, planned, concrete)
+        except SecurityError as exc:
+            c.problems.append(str(exc))
+        checks.append(c)
+    return PreflightReport(plan.plan_id, checks)
     """Check every task against the path and action rules. Never changes anything.
     Raises PlanningError if the plan itself is malformed."""
     order = validate_plan(plan)

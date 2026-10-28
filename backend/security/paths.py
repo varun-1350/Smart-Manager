@@ -40,6 +40,10 @@ class PathPolicy:
             raise SecurityError(f"'{real}' doesn't exist.")
         return real
 
+    def is_protected(self, path) -> bool:
+        """Cheap test used while scanning: skip anything inside a protected location."""
+        return any(is_within(path, p) for p in self._protected)
+    
     # ------------------------------------------------------- finding by name
     def _find_by_name(self, name: str, *, folder: bool) -> Path:
         """A bare name matches the top level of an allowed folder, and must match once."""

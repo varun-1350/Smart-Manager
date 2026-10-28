@@ -5,7 +5,8 @@ from backend.planner.validator import execution_order, validate_plan
 from backend.schemas.plan import ExecutionPlan
 from backend.schemas.task import RiskLevel, Task
 
-SEARCH = {"filenames": [], "names": [], "file_types": ["pdf"], "date_filter": None}
+SEARCH = {"filenames": [], "names": [], "file_types": ["pdf"], "date_filter": None,
+          "scope": None}
 REF = {"from_task": "t1", "select": "largest"}
 
 
@@ -124,3 +125,21 @@ def test_bad_date_filter_rejected():
         "text": "x", "start": "2026-10-10", "end": "2026-10-01", "field": "modified"}})
     with pytest.raises(PlanningError):
         validate_plan(plan(bad))
+    
+def test_scope_shapes():
+    validate_plan(plan(task("t1", "search_files", {**SEARCH, "scope": {"name": "Downloads"}})))
+    for bad_scope in ({"filename": "a.txt"}, {"path": ""}, {"path": r"..\..\Windows"},
+                      {"name": ".."}, {"path": "a", "name": "b"}, "Downloads"):
+        with pytest.raises(PlanningError):
+            validate_plan(plan(task("t1", "search_files", {**SEARCH, "scope": bad_scope})))
+
+
+def test_create_parent_and_name_cannot_escape():
+    ok = task("t1", "create_folder", {"name": "Reports", "parent": {"name": "Documents"}},
+              risk=RiskLevel.MEDIUM)
+    validate_plan(plan(ok))
+    for params in ({"name": r"..\Reports", "parent": {"name": "Documents"}},
+                   {"name": "X", "parent": {"filename": "a.txt"}},
+                   {"name": "X", "parent": {"path": r"D:\..\Windows"}}):
+        with pytest.raises(PlanningError):
+            validate_plan(plan(task("t1", "create_folder", params, risk=RiskLevel.MEDIUM)))

@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+import re
 from datetime import date
 
 from backend.schemas.plan import ExecutionPlan
@@ -21,8 +21,8 @@ _RISK_ORDER = [RiskLevel.LOW, RiskLevel.MEDIUM, RiskLevel.HIGH, RiskLevel.DESTRU
 BASE_RISK = {action: risk for action, risk in ACTIONS.values()}
 
 _PARAMS = {
-    "search_files": {"filenames", "names", "file_types", "date_filter"},
-    "list_files": {"location", "file_types", "date_filter"},
+    "search_files": {"filenames", "names", "file_types", "date_filter", "scope"},
+    "list_files": {"scope", "file_types", "date_filter"},
     "open_file": {"target"},
     "copy_path_to_clipboard": {"target"},
     "move_to_recycle_bin": {"targets"},
@@ -98,13 +98,26 @@ def _check_str_list(task: Task, key: str) -> list:
         raise _fail(task, f"'{key}' must be a list of text values.")
     return value
 
+def _check_scope(task: Task, key: str, value, allow_none: bool) -> None:
+    if value is None and allow_none:
+        return
+    if not (isinstance(value, dict) and len(value) == 1 and set(value) <= {"path", "name"}
+            and all(isinstance(v, str) and v.strip() for v in value.values())):
+        raise _fail(task, f"'{key}' must be a folder name or path.")
+    if ".." in re.split(r"[\\/]", next(iter(value.values()))):
+        raise _fail(task, f"'{key}' can't contain '..'.")
 
 def _check_params(task: Task) -> None:
     keys, p = set(task.parameters), task.parameters
     if task.action in CREATORS:
-        if keys not in ({"name"}, {"path"}):
-            raise _fail(task, "needs exactly one of 'name' or 'path'.")
-        _plain_str(task, next(iter(keys)), p[next(iter(keys))])
+        if keys not in ({"name"}, {"path"}, {"name", "parent"}):
+            raise _fail(task, "needs 'name' (optionally with 'parent') or 'path'.")
+        key = "name" if "name" in keys else "path"
+        value = _plain_str(task, key, p[key])
+        if key == "name" and ("/" in value or "\\" in value):
+            raise _fail(task, "'name' must be a plain name, not a path.")
+        if "parent" in keys:
+            _check_scope(task, "parent", p["parent"], allow_none=False)
         return
     if task.action == "edit_text_file":
         expected = _EDIT_PARAMS.get(p.get("operation"))
@@ -122,15 +135,13 @@ def _check_params(task: Task) -> None:
     if task.action == "search_files":
         lists = [_check_str_list(task, k) for k in ("filenames", "names", "file_types")]
         _check_date_filter(task, p["date_filter"])
+        _check_scope(task, "scope", p["scope"], allow_none=True)
         if not any(lists) and p["date_filter"] is None:
             raise _fail(task, "has nothing to search for.")
     elif task.action == "list_files":
         _check_str_list(task, "file_types")
         _check_date_filter(task, p["date_filter"])
-        loc = p["location"]
-        if loc is not None and not (isinstance(loc, dict) and len(loc) == 1
-                                    and set(loc) <= TARGET_KEYS):
-            raise _fail(task, "'location' has an unexpected shape.")
+        _check_scope(task, "scope", p["scope"], allow_none=True)
     elif task.action == "move_file":
         _plain_str(task, "destination", p["destination"])
     elif task.action == "rename_file":

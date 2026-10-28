@@ -89,7 +89,7 @@ def test_tasks_are_chained_so_a_failure_stops_the_rest():
 def test_search_by_type():
     t = plan_for(clause("SEARCH", "find PDFs")).tasks[0]
     assert t.parameters == {"filenames": [], "names": [], "file_types": ["pdf"],
-                            "date_filter": None}
+                            "date_filter": None, "scope": None}
 
 
 # ---- must refuse (fail closed) ----
@@ -178,3 +178,41 @@ def test_it_after_a_search_demands_exactly_one_result():
 def test_refuses_unsafe_references(steps):
     with pytest.raises(PlanningError):
         plan_for(*[clause(intent, text) for intent, text in steps])
+
+def test_search_in_a_folder_then_move_them():
+    plan = plan_for(clause("SEARCH", "find PDFs in Downloads"),
+                    clause("MOVE", "move them to Archive"))
+    assert plan.tasks[0].parameters["scope"] == {"name": "Downloads"}
+    assert plan.tasks[1].parameters["targets"] == [{"from_task": "t1", "select": "all"}]
+
+
+def test_search_scope_can_be_a_path():
+    t = plan_for(clause("SEARCH", r"find PDFs in D:\Work")).tasks[0]
+    assert t.parameters["scope"] == {"path": r"D:\Work"}
+
+
+def test_list_uses_scope():
+    t = plan_for(clause("LIST", "list files in Downloads")).tasks[0]
+    assert t.parameters == {"scope": {"name": "Downloads"}, "file_types": [], "date_filter": None}
+    assert plan_for(clause("LIST", "list files")).tasks[0].parameters["scope"] is None
+
+
+def test_create_inside_a_folder():
+    t = plan_for(clause("CREATE_FOLDER", "create a folder named Reports in Documents")).tasks[0]
+    assert t.parameters == {"name": "Reports", "parent": {"name": "Documents"}}
+    t = plan_for(clause("CREATE_TEXT_FILE",
+                        r"create a text file named todo.txt in D:\Work")).tasks[0]
+    assert t.parameters == {"name": "todo.txt", "parent": {"path": r"D:\Work"}}
+
+
+@pytest.mark.parametrize("intent, text", [
+    ("DELETE", "delete report.pdf in Downloads"),             # location can't be honored yet
+    ("OPEN", "open report.pdf from Downloads"),
+    ("MOVE", "move report.pdf from Downloads to Archive"),
+    ("SEARCH", "find PDFs in Downloads and in Documents"),    # two folders
+    ("SEARCH", r"find PDFs in ..\..\Windows"),                # traversal rejected by validator
+    ("LIST", "list notes.txt in Downloads"),                  # file plus folder
+])
+def test_refuses_unsafe_or_unclear_scope(intent, text):
+    with pytest.raises(PlanningError):
+        plan_for(clause(intent, text))

@@ -52,6 +52,17 @@ _MONTHS = (r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?
 _UNITS = r"(?:days?|weeks?|months?|years?)"
 _REL = (rf"(?:today|yesterday|(?:this|last)\s+(?:week|month|year)|"
         rf"(?:last|past)\s+\d+\s+{_UNITS}|(?:older|newer)\s+than\s+\d+\s+{_UNITS})")
+_LOCATION = re.compile(
+    r"\b(?:in|inside|within|under|from)\s+(?:the\s+|my\s+)?(?:folder\s+|directory\s+)?"
+    r'(?:"([^"]+)"|\'([^\']+)\'|([A-Za-z]:\\[^\s"<>|?*]*)|([\w\-.]+(?:[\\/][\w\-.]+)*))',
+    re.IGNORECASE,
+)
+# "in this folder", "in order to", "in my computer" are not places we can look
+_LOC_STOP = frozenset({
+    "it", "them", "this", "that", "these", "those", "there", "here", "the", "a", "an",
+    "my", "and", "then", "all", "computer", "pc", "laptop", "system", "order", "case",
+    "total", "folder", "directory", "current", "same", "everywhere", "anywhere",
+})
 _DATE = re.compile(
     rf"\b(?:\d{{4}}-\d{{2}}-\d{{2}}"
     rf"|{_MONTHS}\s+\d{{4}}"
@@ -138,6 +149,23 @@ def blank_quoted(text: str) -> str:
 def _inside(m: re.Match, spans: list[tuple[int, int]]) -> bool:
     return any(s <= m.start() < e for s, e in spans)
 
+def _find_locations(text: str) -> list[str]:
+    spans = quoted_spans(text)
+    masked = _blank(text, _DATE)        # "in October 2026" is a date, not a place
+    found: list[str] = []
+    for m in _LOCATION.finditer(masked):
+        if _inside(m, spans):           # words inside a quoted payload are data
+            continue
+        value = next(g for g in m.groups() if g is not None)
+        if m.group(3) or m.group(4):    # unquoted: trim sentence punctuation
+            value = value.rstrip(",;:!?)")
+            if value.endswith(".") and value.strip("."):
+                value = value.rstrip(".")   # "Downloads." -> "Downloads", but ".." stays
+        value = value.strip()
+        if not value or value.casefold() in _LOC_STOP or _HAS_EXT.search(value):
+            continue                    # empty, vague, or a FILE ("in notes.txt")
+        found.append(value)
+    return _dedupe(found)
 
 def _find_destination(text: str) -> str | None:
     spans = quoted_spans(text)
@@ -165,6 +193,7 @@ def extract_entities(text: str) -> Entities:
 
     # 1. destination + names, from the ORIGINAL text so quoted values are visible
     ent.destination = _find_destination(text)
+    ent.locations = _find_locations(text)
     spans = quoted_spans(text)
     for m in _NAMED.finditer(text):
         if not _inside(m, spans):
@@ -227,7 +256,7 @@ def extract_entities(text: str) -> Entities:
 
     # 6. destination / new name are NOT sources: remove them from the source lists
     ent.names = names
-    reserved = {v.casefold() for v in (ent.destination, ent.new_name) if v}
+    reserved = {v.casefold() for v in (ent.destination, ent.new_name, *ent.locations) if v}
     if reserved:
         ent.paths = [p for p in ent.paths if p.casefold() not in reserved]
         ent.filenames = [f for f in ent.filenames if f.casefold() not in reserved]

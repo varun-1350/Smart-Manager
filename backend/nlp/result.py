@@ -23,7 +23,8 @@ class Entities:
     references: list[str] = field(default_factory=list)  # "the rest", "them", "it"
     texts: list[str] = field(default_factory=list)       # 'quoted text' (EDIT payload)
     edit_op: str | None = None    
-    date_field: str | None = None                        # "created" | "modified"                       # "append" | "replace"
+    date_field: str | None = None                        # "created" | "modified"  
+    locations: list[str] = field(default_factory=list)   # "in Downloads", "in D:\Work"                     # "append" | "replace"
 
     def has_target(self, has_previous: bool = False) -> bool:
         """True if the user pointed at something to act on.

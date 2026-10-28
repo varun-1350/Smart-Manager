@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+import re
 import uuid
 from datetime import date
 from pathlib import PureWindowsPath
@@ -36,8 +36,24 @@ def _plain_name(value: str, what: str) -> str:
     return value
 
 
-def _creation_params(e: Entities, text_file: bool) -> dict:
+_DRIVE = re.compile(r"^[A-Za-z]:\\")
+
+
+def _scope(e: Entities) -> dict | None:
+    """'in Downloads' or 'in D:\\Work' becomes a folder reference; the security layer resolves it."""
+    if len(e.locations) > 1:
+        raise PlanningError("I can only use one folder at a time.")
+    if not e.locations:
+        return None
+    value = e.locations[0]
+    is_path = bool(_DRIVE.match(value)) or "/" in value or "\\" in value
+    return {"path": value} if is_path else {"name": value}
+
+
+def _creation_params(e: Entities, text_file: bool, scope: dict | None = None) -> dict:
     if e.paths:
+        if scope:
+            raise PlanningError("Give a full path, or a name plus a folder, not both.")
         path = e.paths[0]
         if text_file and not PureWindowsPath(path).suffix:
             path += ".txt"
@@ -48,8 +64,10 @@ def _creation_params(e: Entities, text_file: bool) -> dict:
     name = _plain_name(candidates[0], "The name")
     if text_file and "." not in name:
         name += ".txt"
-    return {"name": name}
-
+    params: dict = {"name": name}
+    if scope:
+        params["parent"] = scope
+    return params
 
 def _params(action: str, e: Entities, ref: dict | None = None,
             today: date | None = None) -> dict:
@@ -62,15 +80,25 @@ def _params(action: str, e: Entities, ref: dict | None = None,
             raise PlanningError("Date filters only work with searching and listing. Search "
                                 "first, e.g. 'find PDFs older than 30 days, then delete them'.")
         date_filter = build_date_filter(e.dates, e.date_field, today or date.today())
+    scope = _scope(e)
 
     if action == "search_files":
         names = [*e.names, *e.texts]
         if not (e.filenames or names or e.file_types or date_filter):
             raise PlanningError("I need something to search for.")
-        return {"filenames": e.filenames, "names": names,
-                "file_types": e.file_types, "date_filter": date_filter}
-
+        return {"filenames": e.filenames, "names": names, "file_types": e.file_types,
+                "date_filter": date_filter, "scope": scope}
     if action == "list_files":
+        targets = _explicit_targets(e, include_texts=True)
+        if scope and targets:
+            raise PlanningError("Name one folder to list.")
+        if len(targets) > 1:
+            raise PlanningError("I can list one folder at a time.")
+        if targets and "filename" in targets[0]:
+            raise PlanningError("That's a file, not a folder.")
+        # scope None = the app's default folder (read-only, so acceptable)
+        return {"scope": scope or (targets[0] if targets else None),
+                "file_types": e.file_types, "date_filter": date_filter}
         targets = _explicit_targets(e, include_texts=True)
         if len(targets) > 1:
             raise PlanningError("I can list one folder at a time.")
@@ -79,11 +107,14 @@ def _params(action: str, e: Entities, ref: dict | None = None,
                 "file_types": e.file_types, "date_filter": date_filter}
 
     if action == "create_folder":
-        return _creation_params(e, text_file=False)
+        return _creation_params(e, text_file=False, scope=scope)
     if action == "create_text_file":
-        return _creation_params(e, text_file=True)
+        return _creation_params(e, text_file=True, scope=scope)
 
     # ---- actions on EXISTING files: need specific, named targets ----
+    if e.locations:
+        raise PlanningError("I can't yet tell which folder you mean for this action. "
+                            "Please give the full path of the file instead.")
     if ref is not None:
         targets = [ref]          # chosen at run time from an earlier task's results
     else:

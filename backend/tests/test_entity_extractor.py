@@ -104,3 +104,37 @@ def test_date_field():
     assert extract_entities("find PDFs created last week").date_field == "created"
     assert extract_entities("find PDFs modified last week").date_field == "modified"
     assert extract_entities("find PDFs from last week").date_field is None
+
+def test_location_name_and_folder_word():
+    assert extract_entities("list files in Downloads").locations == ["Downloads"]
+    assert extract_entities("list files in the Downloads folder").locations == ["Downloads"]
+
+
+def test_location_path_is_not_also_a_source():
+    e = extract_entities(r"find PDFs in D:\Work\Reports")
+    assert e.locations == [r"D:\Work\Reports"] and e.paths == []
+
+
+def test_relative_path_is_not_truncated():
+    assert extract_entities(r"list files in Documents\Reports").locations == [r"Documents\Reports"]
+
+
+def test_quoted_location():
+    e = extract_entities('list files in "My Documents"')
+    assert e.locations == ["My Documents"] and e.texts == []
+
+
+def test_in_before_a_date_or_a_file_is_not_a_location():
+    assert extract_entities("find PDFs modified in October 2026").locations == []
+    assert extract_entities("in hii.txt add 'yo'").locations == []
+    assert extract_entities("replace 'a' with 'b' in pets.txt").locations == []
+
+
+def test_vague_places_and_payload_text_are_ignored():
+    assert extract_entities("list files in this folder").locations == []
+    assert extract_entities("find report.pdf in my computer").locations == []
+    assert extract_entities("add 'stored in Backup' to notes.txt").locations == []
+
+
+def test_move_destination_is_not_a_location():
+    assert extract_entities("move a.txt to Archive").locations == []

@@ -88,13 +88,13 @@ def test_tasks_are_chained_so_a_failure_stops_the_rest():
 
 def test_search_by_type():
     t = plan_for(clause("SEARCH", "find PDFs")).tasks[0]
-    assert t.parameters == {"filenames": [], "names": [], "file_types": ["pdf"]}
+    assert t.parameters == {"filenames": [], "names": [], "file_types": ["pdf"],
+                            "date_filter": None}
 
 
 # ---- must refuse (fail closed) ----
 @pytest.mark.parametrize("intent, text", [
     ("OPEN", "open the largest PDF"),                 # reference: piece 2
-    ("SEARCH", "find PDFs modified last week"),       # dates: piece 3
     ("DELETE", "delete all PDFs"),                    # type with no folder scope
     ("DELETE", r"delete all PDFs in D:\Work"),        # must NOT delete D:\Work itself
     ("OPEN", "open a.txt and b.txt"),                 # single-target action

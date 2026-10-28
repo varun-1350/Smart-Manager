@@ -22,7 +22,8 @@ class Entities:
     new_name: str | None = None                          # "rename a to NEW" (RENAME)
     references: list[str] = field(default_factory=list)  # "the rest", "them", "it"
     texts: list[str] = field(default_factory=list)       # 'quoted text' (EDIT payload)
-    edit_op: str | None = None                           # "append" | "replace"
+    edit_op: str | None = None    
+    date_field: str | None = None                        # "created" | "modified"                       # "append" | "replace"
 
     def has_target(self, has_previous: bool = False) -> bool:
         """True if the user pointed at something to act on.

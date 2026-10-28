@@ -61,6 +61,8 @@ _DATE = re.compile(
     re.IGNORECASE,
 )
 
+_DATE_FIELD = re.compile(r"\b(created|modified|edited|changed|updated)\b", re.IGNORECASE)
+
 _SORT = re.compile(
     r"\b(largest|biggest|smallest|newest|latest|most\s+recent|recent|oldest)\b",
     re.IGNORECASE,
@@ -192,6 +194,9 @@ def extract_entities(text: str) -> Entities:
 
     # 4. dates, sort order, references
     ent.dates = [m.group(0) for m in _DATE.finditer(work)]
+    field_match = _DATE_FIELD.search(work)
+    if ent.dates and field_match:
+        ent.date_field = "created" if field_match.group(1).lower() == "created" else "modified"
     sort = _SORT.search(work)
     if sort:
         ent.sort_by = _SORT_MAP[" ".join(sort.group(1).lower().split())]

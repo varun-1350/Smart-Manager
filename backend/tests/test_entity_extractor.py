@@ -99,3 +99,8 @@ def test_replace_has_two_texts():
 def test_move_is_not_an_edit():
     e = extract_entities("move report.pdf to Archive")
     assert e.edit_op is None and e.destination == "Archive"
+
+def test_date_field():
+    assert extract_entities("find PDFs created last week").date_field == "created"
+    assert extract_entities("find PDFs modified last week").date_field == "modified"
+    assert extract_entities("find PDFs from last week").date_field is None

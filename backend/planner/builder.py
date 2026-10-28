@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date
 from pathlib import PureWindowsPath
 
 from backend.nlp.result import Entities, NLPResult, NLPStatus
@@ -8,7 +9,9 @@ from backend.schemas.plan import ExecutionPlan
 from backend.schemas.task import Task
 
 from .actions import ACTIONS, APPROVAL_RISKS, SUPPORTED_ACTIONS
+from .dates import build_date_filter
 from .errors import PlanningError
+from .validator import validate_plan
 from .references import (REFERENCE_ACTIONS, SINGLE_TARGET_ACTIONS, ref_dependencies,
                          resolve_reference, risk_for_reference)
 
@@ -48,25 +51,32 @@ def _creation_params(e: Entities, text_file: bool) -> dict:
     return {"name": name}
 
 
-def _params(action: str, e: Entities, ref: dict | None = None) -> dict:
+def _params(action: str, e: Entities, ref: dict | None = None,
+            today: date | None = None) -> dict:
     if (e.references or e.sort_by) and ref is None:
         raise PlanningError("Only actions on existing files can refer to earlier results "
                             "('the largest', 'the rest', 'it').")
+    date_filter = None
     if e.dates:
-        raise PlanningError("Date filters aren't supported by the planner yet.")
+        if action not in ("search_files", "list_files"):
+            raise PlanningError("Date filters only work with searching and listing. Search "
+                                "first, e.g. 'find PDFs older than 30 days, then delete them'.")
+        date_filter = build_date_filter(e.dates, e.date_field, today or date.today())
 
     if action == "search_files":
         names = [*e.names, *e.texts]
-        if not (e.filenames or names or e.file_types):
+        if not (e.filenames or names or e.file_types or date_filter):
             raise PlanningError("I need something to search for.")
-        return {"filenames": e.filenames, "names": names, "file_types": e.file_types}
+        return {"filenames": e.filenames, "names": names,
+                "file_types": e.file_types, "date_filter": date_filter}
 
     if action == "list_files":
         targets = _explicit_targets(e, include_texts=True)
         if len(targets) > 1:
             raise PlanningError("I can list one folder at a time.")
         # location None = the executor's default folder (acceptable: listing is read-only)
-        return {"location": targets[0] if targets else None, "file_types": e.file_types}
+        return {"location": targets[0] if targets else None,
+                "file_types": e.file_types, "date_filter": date_filter}
 
     if action == "create_folder":
         return _creation_params(e, text_file=False)
@@ -109,11 +119,13 @@ def _params(action: str, e: Entities, ref: dict | None = None) -> dict:
     raise PlanningError(f"Unsupported action: {action}")
 
 
-def build_plan(nlp: NLPResult, request_id: str | None = None) -> ExecutionPlan:
+def build_plan(nlp: NLPResult, request_id: str | None = None,
+               today: date | None = None) -> ExecutionPlan:
     # Defense in depth: never trust that the caller checked.
     if nlp.status != NLPStatus.OK:
         raise PlanningError("Only fully understood requests can be planned.")
 
+    today = today or date.today()      # one fixed "today" for the whole plan
     tasks: list[Task] = []
     for i, clause in enumerate(nlp.clauses, start=1):
         if clause.status != NLPStatus.OK or clause.intent not in ACTIONS:
@@ -131,7 +143,7 @@ def build_plan(nlp: NLPResult, request_id: str | None = None) -> ExecutionPlan:
                     raise PlanningError("Name the file, or refer to an earlier result, but not both.")
                 if not explicit and (e.references or e.sort_by or e.file_types):
                     ref = resolve_reference(action, e, tasks)
-            params = _params(action, e, ref)
+            params = _params(action, e, ref,today)
         except PlanningError as exc:
             raise PlanningError(f'"{clause.text}": {exc}') from exc
 
@@ -149,8 +161,10 @@ def build_plan(nlp: NLPResult, request_id: str | None = None) -> ExecutionPlan:
             risk_level=risk,
             approval_required=approval,
         ))
-    return ExecutionPlan(
+    plan = ExecutionPlan(
         plan_id=uuid.uuid4().hex,
         request_id=request_id or uuid.uuid4().hex,
         tasks=tasks,
     )
+    validate_plan(plan)      # last gate: nothing unvalidated leaves the planner
+    return plan

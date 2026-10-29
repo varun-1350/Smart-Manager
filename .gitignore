@@ -44,3 +44,8 @@ Thumbs.db
 *.swp
 *.swo
 
+
+
+data/journal/
+data/backups/
+

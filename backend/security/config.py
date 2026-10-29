@@ -73,3 +73,15 @@ def load_config(path=None, home=None) -> SecurityConfig:
         except (OSError, ValueError, AttributeError) as exc:
             raise SecurityError(f"Could not read {path}: {exc}") from exc
     return default_config(home=home, project_root=project_root, extra_roots=extra)
+
+def sandbox_config(folder, home=None, project_root=None) -> SecurityConfig:
+    """Allow ONE folder only. For testing with the real tools."""
+    base = default_config(home=home, project_root=project_root)
+    root = Path(folder)
+    if not root.is_absolute():
+        raise SecurityError("The sandbox must be a full path, like D:\\SmartManagerTest.")
+    if not root.is_dir():
+        raise SecurityError(f"The sandbox folder doesn't exist: {root}")
+    _validate_roots([root], base.protected_paths)
+    return SecurityConfig(allowed_roots=(root,), protected_paths=base.protected_paths,
+                          default_scope=root)

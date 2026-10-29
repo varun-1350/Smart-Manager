@@ -1,0 +1,12 @@
+# one phrase per line, optional "| EXPECTED_INTENT"
+show me my pdfs | SEARCH
+whats in downloads | LIST
+open the newest one | OPEN
+make new folder taxes | CREATE_FOLDER
+make a note file called ideas | CREATE_TEXT_FILE
+put a.pdf in archive | MOVE
+get rid of old.txt | DELETE
+copy the path for notes.txt | COPY_PATH_TO_CLIPBOARD
+rename a.pdf to b.pdf | RENAME
+in notes.txt write 'call mom' | EDIT_TEXT_FILE
+write me a poem | UNSUPPORTED

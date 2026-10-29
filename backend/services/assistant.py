@@ -6,6 +6,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from datetime import date
+from pathlib import Path
 from typing import Callable
 
 from backend.execution.approval import ApprovalError, grant
@@ -178,5 +179,29 @@ class Assistant:
         runs, errors = find_interrupted(self.journal_dir)
         return [recovery_report(r, self.backup_dir) for r in runs], errors
 
-    def dismiss_interrupted(self, run_path) -> None:
-        acknowledge(run_path, "reviewed by the user")
+    def _find_interrupted(self, run_id):
+        runs, _ = find_interrupted(self.journal_dir)
+        name = Path(str(run_id)).name       # match only against the server's own list
+        return next((r for r in runs if r.path.name == name), None)
+
+    def dismiss_interrupted(self, run_id) -> None:
+        run = self._find_interrupted(run_id)
+        if run is None:
+            raise LookupError("That interrupted run wasn't found.")
+        acknowledge(run.path, "reviewed by the user")
+
+    def undo_interrupted(self, run_id, *, confirmed: bool = False) -> list[UndoOutcome]:
+        """Undo what an interrupted run is known to have done. The steps come from the
+        journal and the disk, never from the caller."""
+        if not confirmed:
+            raise PermissionError("Undo needs explicit confirmation.")
+        run = self._find_interrupted(run_id)
+        if run is None:
+            raise LookupError("That interrupted run wasn't found.")
+        steps = recovery_report(run, self.backup_dir).undo_steps
+        outcomes = self.run_undo_steps(steps, confirmed=True)
+        try:
+            record_undo(run.path, outcomes)
+        except OSError:
+            pass
+        return outcomes

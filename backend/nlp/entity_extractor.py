@@ -41,7 +41,8 @@ _FOLDER = re.compile(
     r'(?:"([^"]+)"|([\w\-.]+))',
     re.IGNORECASE,
 )
-_RENAME = re.compile(r"\b(?:rename|change\s+the\s+name)\b", re.IGNORECASE)
+_RENAME = re.compile(r"\b(?:renam\w*|retitl\w*|change\s+the\s+name)\b", re.IGNORECASE)
+_PLACE = re.compile(r"\b(?:put|place|drop|stash|stick)\b", re.IGNORECASE)
 _AS = re.compile(r'\bas\s+(?:"([^"]+)"|\'([^\']+)\'|([\w\-.]+))', re.IGNORECASE)
 _EDIT_APPEND = re.compile(r"\b(?:add|append|write|insert)\b", re.IGNORECASE)
 _EDIT_REPLACE = re.compile(r"\b(?:replace|substitute)\b", re.IGNORECASE)
@@ -62,6 +63,7 @@ _LOC_STOP = frozenset({
     "it", "them", "this", "that", "these", "those", "there", "here", "the", "a", "an",
     "my", "and", "then", "all", "computer", "pc", "laptop", "system", "order", "case",
     "total", "folder", "directory", "current", "same", "everywhere", "anywhere",
+    "recycle", "trash", "bin", "clipboard",
 })
 _DATE = re.compile(
     rf"\b(?:\d{{4}}-\d{{2}}-\d{{2}}"
@@ -246,6 +248,10 @@ def extract_entities(text: str) -> Entities:
             ent.edit_op = "append"
         if ent.destination and _HAS_EXT.search(ent.destination):
             ent.destination = None   # "append 'x' to notes.txt": that is the FILE
+
+    # 4c. "put X in Archive": with these verbs, "in <folder>" is where the file goes
+    if not ent.destination and len(ent.locations) == 1 and _PLACE.search(work):
+        ent.destination, ent.locations = ent.locations[0], []
 
     # 5. file types, after removing "in X" / "to X" / "folder X" phrases
     typed = _blank(work, _LOCATION_PHRASE)

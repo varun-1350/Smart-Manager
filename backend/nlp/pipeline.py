@@ -3,15 +3,15 @@ from __future__ import annotations
 import re
 
 from .confidence import is_confident
-from .entity_extractor import blank_quoted, extract_entities, quoted_spans
+from .entity_extractor import blank_quoted, extract_entities, quoted_spans,mask_entities
 from .intent_classifier import IntentClassifier
-from .intents import MUTATING_INTENTS, UNSUPPORTED
+from .intents import MUTATING_INTENTS, TRIGGER_HINT, UNSUPPORTED, has_trigger
 from .negation import find_negated_actions, negated_intents
 from .result import ClauseResult, Entities, NLPResult, NLPStatus
 
 _VERBS = (r"(?:find|search|locate|list|show|open|launch|create|make|move|relocate|"
-          r"transfer|delete|remove|trash|erase|copy|rename|add|append|write|insert|"
-          r"edit|replace)")
+          r"transfer|shift|put|place|drop|stash|stick|delete|remove|trash|erase|discard|"
+          r"dispose|throw|get\s+rid|copy|rename|add|append|write|insert|edit|replace)")
 
 # "delete the last line of x.txt" edits INSIDE a file; it must never become a file delete
 _PARTIAL_DELETE = re.compile(
@@ -102,6 +102,14 @@ def _analyze_clause(clause: str, clf: IntentClassifier, has_previous: bool) -> C
         return make(NLPStatus.NEEDS_CLARIFICATION,
                     "That sounds like removing text inside a file. I can only add or "
                     "replace text, and I won't delete the file itself unless you ask.")
+
+    # 3c. a file-changing intent must be backed by a word that really means it
+    if not has_trigger(conf.top_intent, mask_entities(clause)):
+        hint = TRIGGER_HINT[conf.top_intent]
+        return make(NLPStatus.NEEDS_CLARIFICATION,
+                    f"I'm not sure you want me to {hint} anything. If you do, please say "
+                    f"it with the word '{hint}'.")
+                    
     # 4. required details missing -> ask
     missing = _missing(conf.top_intent, entities, has_previous)
     if missing:

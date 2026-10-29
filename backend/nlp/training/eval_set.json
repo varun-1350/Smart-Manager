@@ -1,6 +1,6 @@
 [
   {
-    "text": "look for every pdf file",
+    "text": "look for every photo file",
     "intent": "SEARCH"
   },
   {
@@ -8,7 +8,7 @@
     "intent": "SEARCH"
   },
   {
-    "text": "can you find \"Final Draft.docx\"",
+    "text": "can you find holiday.png",
     "intent": "SEARCH"
   },
   {
@@ -16,11 +16,11 @@
     "intent": "SEARCH"
   },
   {
-    "text": "search for files called Receipts",
+    "text": "search for files called Clients",
     "intent": "SEARCH"
   },
   {
-    "text": "hunt down PDF files edited on 2026-10-01",
+    "text": "hunt down PDF files edited in March 2026",
     "intent": "SEARCH"
   },
   {
@@ -28,15 +28,11 @@
     "intent": "SEARCH"
   },
   {
-    "text": "look for every photo file",
+    "text": "look for every document file",
     "intent": "SEARCH"
   },
   {
-    "text": "can you find scan_01.jpg",
-    "intent": "SEARCH"
-  },
-  {
-    "text": "i need to find my music files",
+    "text": "i need to find my Excel files",
     "intent": "SEARCH"
   },
   {
@@ -44,27 +40,15 @@
     "intent": "SEARCH"
   },
   {
-    "text": "hunt down pictures edited on 2026-10-01",
+    "text": "hunt down Excel files edited last year",
     "intent": "SEARCH"
   },
   {
-    "text": "what's inside the Taxes folder",
-    "intent": "LIST"
+    "text": "find documents created last year",
+    "intent": "SEARCH"
   },
   {
-    "text": "give me a list of files in Scans",
-    "intent": "LIST"
-  },
-  {
-    "text": "show every file in Taxes",
-    "intent": "LIST"
-  },
-  {
-    "text": "enumerate the Excel files in Work",
-    "intent": "LIST"
-  },
-  {
-    "text": "what's inside the Receipts folder",
+    "text": "what's inside the Travel folder",
     "intent": "LIST"
   },
   {
@@ -72,55 +56,59 @@
     "intent": "LIST"
   },
   {
-    "text": "show every file in Scans",
-    "intent": "LIST"
-  },
-  {
-    "text": "enumerate the documents in Scans",
-    "intent": "LIST"
-  },
-  {
-    "text": "what's inside the Work folder",
-    "intent": "LIST"
-  },
-  {
-    "text": "give me a list of files in Taxes",
-    "intent": "LIST"
-  },
-  {
     "text": "show every file in Work",
     "intent": "LIST"
   },
   {
-    "text": "enumerate the Excel files in Music",
+    "text": "enumerate the Excel files in Receipts",
     "intent": "LIST"
   },
   {
-    "text": "could you open the smallest pdf for me",
+    "text": "give me a list of files in Receipts",
+    "intent": "LIST"
+  },
+  {
+    "text": "show every file in Music",
+    "intent": "LIST"
+  },
+  {
+    "text": "enumerate the documents in Travel",
+    "intent": "LIST"
+  },
+  {
+    "text": "what's inside the Taxes folder",
+    "intent": "LIST"
+  },
+  {
+    "text": "give me a list of files in Work",
+    "intent": "LIST"
+  },
+  {
+    "text": "show every file in Taxes",
+    "intent": "LIST"
+  },
+  {
+    "text": "what's inside the Clients folder",
+    "intent": "LIST"
+  },
+  {
+    "text": "show every file in Clients",
+    "intent": "LIST"
+  },
+  {
+    "text": "could you open holiday.png for me",
     "intent": "OPEN"
   },
   {
-    "text": "i want to open thesis.docx",
+    "text": "i want to open \"Final Draft.docx\"",
     "intent": "OPEN"
   },
   {
-    "text": "pull up \"Final Draft.docx\"",
+    "text": "pull up holiday.png",
     "intent": "OPEN"
   },
   {
-    "text": "open readme.md please",
-    "intent": "OPEN"
-  },
-  {
-    "text": "open up them",
-    "intent": "OPEN"
-  },
-  {
-    "text": "could you open it for me",
-    "intent": "OPEN"
-  },
-  {
-    "text": "pull up contract.pdf",
+    "text": "open \"Final Draft.docx\" please",
     "intent": "OPEN"
   },
   {
@@ -128,20 +116,64 @@
     "intent": "OPEN"
   },
   {
-    "text": "could you open the oldest pdf for me",
+    "text": "could you open D:\\School\\essay.docx for me",
     "intent": "OPEN"
   },
   {
-    "text": "open up thesis.docx",
+    "text": "i want to open slides.pptx",
     "intent": "OPEN"
   },
   {
-    "text": "could you open the oldest photo for me",
+    "text": "open scan_01.jpg please",
     "intent": "OPEN"
   },
   {
-    "text": "open up the oldest song",
+    "text": "could you open \"Final Draft.docx\" for me",
     "intent": "OPEN"
+  },
+  {
+    "text": "open up readme.md",
+    "intent": "OPEN"
+  },
+  {
+    "text": "could you open the smallest document for me",
+    "intent": "OPEN"
+  },
+  {
+    "text": "open up the rest",
+    "intent": "OPEN"
+  },
+  {
+    "text": "please create a folder called Clients",
+    "intent": "CREATE_FOLDER"
+  },
+  {
+    "text": "add a new folder named Receipts",
+    "intent": "CREATE_FOLDER"
+  },
+  {
+    "text": "make a new directory Clients",
+    "intent": "CREATE_FOLDER"
+  },
+  {
+    "text": "i want a folder named School",
+    "intent": "CREATE_FOLDER"
+  },
+  {
+    "text": "create a new directory called Receipts",
+    "intent": "CREATE_FOLDER"
+  },
+  {
+    "text": "add a new folder named School",
+    "intent": "CREATE_FOLDER"
+  },
+  {
+    "text": "make a new directory Travel",
+    "intent": "CREATE_FOLDER"
+  },
+  {
+    "text": "i want a folder named Clients",
+    "intent": "CREATE_FOLDER"
   },
   {
     "text": "please create a folder called Receipts",
@@ -152,35 +184,7 @@
     "intent": "CREATE_FOLDER"
   },
   {
-    "text": "make a new directory Receipts",
-    "intent": "CREATE_FOLDER"
-  },
-  {
-    "text": "i want a folder named Travel",
-    "intent": "CREATE_FOLDER"
-  },
-  {
-    "text": "create a new directory called School",
-    "intent": "CREATE_FOLDER"
-  },
-  {
-    "text": "please create a folder called Drafts",
-    "intent": "CREATE_FOLDER"
-  },
-  {
-    "text": "add a new folder named School",
-    "intent": "CREATE_FOLDER"
-  },
-  {
-    "text": "make a new directory School",
-    "intent": "CREATE_FOLDER"
-  },
-  {
     "text": "i want a folder named Drafts",
-    "intent": "CREATE_FOLDER"
-  },
-  {
-    "text": "create a new directory called Clients",
     "intent": "CREATE_FOLDER"
   },
   {
@@ -188,15 +192,11 @@
     "intent": "CREATE_FOLDER"
   },
   {
-    "text": "i want a folder named Clients",
-    "intent": "CREATE_FOLDER"
-  },
-  {
-    "text": "please make a text file named Drafts",
+    "text": "please make a text file named School",
     "intent": "CREATE_TEXT_FILE"
   },
   {
-    "text": "generate a new text file draft.txt",
+    "text": "generate a new text file journal.txt",
     "intent": "CREATE_TEXT_FILE"
   },
   {
@@ -204,7 +204,31 @@
     "intent": "CREATE_TEXT_FILE"
   },
   {
-    "text": "create an empty text file draft.txt",
+    "text": "create an empty text file journal.txt",
+    "intent": "CREATE_TEXT_FILE"
+  },
+  {
+    "text": "start a new text file named Drafts",
+    "intent": "CREATE_TEXT_FILE"
+  },
+  {
+    "text": "i want a new txt file called Receipts",
+    "intent": "CREATE_TEXT_FILE"
+  },
+  {
+    "text": "start a new text file named Travel",
+    "intent": "CREATE_TEXT_FILE"
+  },
+  {
+    "text": "please make a text file named Travel",
+    "intent": "CREATE_TEXT_FILE"
+  },
+  {
+    "text": "i want a new txt file called Clients",
+    "intent": "CREATE_TEXT_FILE"
+  },
+  {
+    "text": "start a new text file named School",
     "intent": "CREATE_TEXT_FILE"
   },
   {
@@ -216,115 +240,67 @@
     "intent": "CREATE_TEXT_FILE"
   },
   {
-    "text": "i want a new txt file called Drafts",
-    "intent": "CREATE_TEXT_FILE"
-  },
-  {
-    "text": "start a new text file named Clients",
-    "intent": "CREATE_TEXT_FILE"
-  },
-  {
-    "text": "i want a new txt file called School",
-    "intent": "CREATE_TEXT_FILE"
-  },
-  {
-    "text": "please make a text file named School",
-    "intent": "CREATE_TEXT_FILE"
-  },
-  {
-    "text": "please make a text file named Clients",
-    "intent": "CREATE_TEXT_FILE"
-  },
-  {
-    "text": "i want a new txt file called Clients",
-    "intent": "CREATE_TEXT_FILE"
-  },
-  {
-    "text": "can you move D:\\School\\essay.docx to Receipts",
+    "text": "can you move thesis.docx to Music",
     "intent": "MOVE"
   },
   {
-    "text": "i want to move all music files into Taxes",
+    "text": "i want to move that file into Clients",
     "intent": "MOVE"
   },
   {
-    "text": "relocate all music files into Scans",
+    "text": "relocate all documents into Scans",
     "intent": "MOVE"
   },
   {
-    "text": "move \"Final Draft.docx\" over to the Receipts folder",
+    "text": "move D:\\School\\essay.docx over to the Scans folder",
     "intent": "MOVE"
   },
   {
-    "text": "transfer Sales_Q3.xlsx to D:\\Clients",
+    "text": "transfer \"Final Draft.docx\" to F:\\Media",
     "intent": "MOVE"
   },
   {
-    "text": "can you move the smallest pdf to Receipts",
+    "text": "stick holiday.png in Work",
     "intent": "MOVE"
   },
   {
-    "text": "i want to move readme.md into Receipts",
+    "text": "can you move \"Final Draft.docx\" to Work",
     "intent": "MOVE"
   },
   {
-    "text": "relocate all PDF files into Receipts",
+    "text": "i want to move the latest document into Scans",
     "intent": "MOVE"
   },
   {
-    "text": "move holiday.png over to the Taxes folder",
+    "text": "relocate all music files into Music",
     "intent": "MOVE"
   },
   {
-    "text": "can you move slides.pptx to Receipts",
+    "text": "move the biggest photo over to the Receipts folder",
     "intent": "MOVE"
   },
   {
-    "text": "i want to move the biggest document into Work",
+    "text": "stick thesis.docx in Music",
     "intent": "MOVE"
   },
   {
-    "text": "relocate all music files into Work",
+    "text": "can you move all pictures to Music",
     "intent": "MOVE"
   },
   {
-    "text": "could you delete the rest",
+    "text": "could you delete readme.md",
     "intent": "DELETE"
   },
   {
-    "text": "throw away holiday.png",
+    "text": "throw away scan_01.jpg",
     "intent": "DELETE"
   },
   {
-    "text": "i want to delete all PDF files",
+    "text": "i want to delete the smallest song",
     "intent": "DELETE"
   },
   {
-    "text": "put contract.pdf in the recycle bin",
-    "intent": "DELETE"
-  },
-  {
-    "text": "remove all pictures older than 14 days",
-    "intent": "DELETE"
-  },
-  {
-    "text": "dispose of scan_01.jpg",
-    "intent": "DELETE"
-  },
-  {
-    "text": "could you delete holiday.png",
-    "intent": "DELETE"
-  },
-  {
-    "text": "i want to delete the latest pdf",
-    "intent": "DELETE"
-  },
-  {
-    "text": "remove all music files older than 60 days",
-    "intent": "DELETE"
-  },
-  {
-    "text": "i want to delete scan_01.jpg",
+    "text": "put Sales_Q3.xlsx in the recycle bin",
     "intent": "DELETE"
   },
   {
@@ -332,15 +308,39 @@
     "intent": "DELETE"
   },
   {
-    "text": "could you delete them",
+    "text": "dispose of contract.pdf",
     "intent": "DELETE"
   },
   {
-    "text": "please copy contract.pdf to the clipboard",
+    "text": "toss holiday.png in the bin",
+    "intent": "DELETE"
+  },
+  {
+    "text": "i want to delete it",
+    "intent": "DELETE"
+  },
+  {
+    "text": "remove all music files older than 60 days",
+    "intent": "DELETE"
+  },
+  {
+    "text": "remove all pictures older than 365 days",
+    "intent": "DELETE"
+  },
+  {
+    "text": "toss \"Final Draft.docx\" in the bin",
+    "intent": "DELETE"
+  },
+  {
+    "text": "throw away \"Final Draft.docx\"",
+    "intent": "DELETE"
+  },
+  {
+    "text": "please copy scan_01.jpg to the clipboard",
     "intent": "COPY_TO_CLIPBOARD"
   },
   {
-    "text": "can you copy the oldest pdf to clipboard",
+    "text": "can you copy C:\\Temp\\log.txt to clipboard",
     "intent": "COPY_TO_CLIPBOARD"
   },
   {
@@ -348,15 +348,11 @@
     "intent": "COPY_TO_CLIPBOARD"
   },
   {
-    "text": "copy Excel files to the clipboard",
+    "text": "copy music files to the clipboard",
     "intent": "COPY_TO_CLIPBOARD"
   },
   {
-    "text": "please copy \"Final Draft.docx\" to the clipboard",
-    "intent": "COPY_TO_CLIPBOARD"
-  },
-  {
-    "text": "can you copy all pictures to clipboard",
+    "text": "can you copy thesis.docx to clipboard",
     "intent": "COPY_TO_CLIPBOARD"
   },
   {
@@ -372,11 +368,7 @@
     "intent": "COPY_TO_CLIPBOARD"
   },
   {
-    "text": "copy music files to the clipboard",
-    "intent": "COPY_TO_CLIPBOARD"
-  },
-  {
-    "text": "can you copy all music files to clipboard",
+    "text": "please copy \"Final Draft.docx\" to the clipboard",
     "intent": "COPY_TO_CLIPBOARD"
   },
   {
@@ -384,23 +376,31 @@
     "intent": "COPY_TO_CLIPBOARD"
   },
   {
-    "text": "copy the path for holiday.png",
+    "text": "copy documents to the clipboard",
+    "intent": "COPY_TO_CLIPBOARD"
+  },
+  {
+    "text": "copy Excel files to the clipboard",
+    "intent": "COPY_TO_CLIPBOARD"
+  },
+  {
+    "text": "copy the path for readme.md",
     "intent": "COPY_PATH_TO_CLIPBOARD"
   },
   {
-    "text": "i need the path of thesis.docx on my clipboard",
+    "text": "i need the path of the oldest song on my clipboard",
     "intent": "COPY_PATH_TO_CLIPBOARD"
   },
   {
-    "text": "copy scan_01.jpg location to clipboard",
+    "text": "copy holiday.png location to clipboard",
     "intent": "COPY_PATH_TO_CLIPBOARD"
   },
   {
-    "text": "copy full path of \"Final Draft.docx\"",
+    "text": "copy full path of contract.pdf",
     "intent": "COPY_PATH_TO_CLIPBOARD"
   },
   {
-    "text": "copy full path of readme.md",
+    "text": "i need the path of the biggest photo on my clipboard",
     "intent": "COPY_PATH_TO_CLIPBOARD"
   },
   {
@@ -408,15 +408,7 @@
     "intent": "COPY_PATH_TO_CLIPBOARD"
   },
   {
-    "text": "i need the path of D:\\School\\essay.docx on my clipboard",
-    "intent": "COPY_PATH_TO_CLIPBOARD"
-  },
-  {
-    "text": "i need the path of the smallest pdf on my clipboard",
-    "intent": "COPY_PATH_TO_CLIPBOARD"
-  },
-  {
-    "text": "i need the path of the smallest document on my clipboard",
+    "text": "i need the path of contract.pdf on my clipboard",
     "intent": "COPY_PATH_TO_CLIPBOARD"
   },
   {
@@ -424,55 +416,47 @@
     "intent": "COPY_PATH_TO_CLIPBOARD"
   },
   {
-    "text": "i need the path of the smallest song on my clipboard",
+    "text": "i need the path of C:\\Temp\\log.txt on my clipboard",
     "intent": "COPY_PATH_TO_CLIPBOARD"
   },
   {
-    "text": "i need the path of all documents on my clipboard",
+    "text": "i need the path of the biggest song on my clipboard",
     "intent": "COPY_PATH_TO_CLIPBOARD"
   },
   {
-    "text": "can you rename slides.pptx to v2.pdf",
+    "text": "copy full path of \"Final Draft.docx\"",
+    "intent": "COPY_PATH_TO_CLIPBOARD"
+  },
+  {
+    "text": "i need the path of that file on my clipboard",
+    "intent": "COPY_PATH_TO_CLIPBOARD"
+  },
+  {
+    "text": "can you rename readme.md to backup_copy.xlsx",
     "intent": "RENAME"
   },
   {
-    "text": "i want to rename contract.pdf as report_final.docx",
+    "text": "i want to rename readme.md as report_final.docx",
     "intent": "RENAME"
   },
   {
-    "text": "rename contract.pdf into backup_copy.xlsx",
+    "text": "rename slides.pptx into report_final.docx",
     "intent": "RENAME"
   },
   {
-    "text": "i'd like to rename slides.pptx to backup_copy.xlsx",
+    "text": "i'd like to rename the biggest document to v2.pdf",
     "intent": "RENAME"
   },
   {
-    "text": "rename the file Sales_Q3.xlsx to report_final.docx",
+    "text": "rename the file \"Final Draft.docx\" to backup_copy.xlsx",
     "intent": "RENAME"
   },
   {
-    "text": "i'd like to rename all music files to report_final.docx",
+    "text": "i'd like to rename thesis.docx to v2.pdf",
     "intent": "RENAME"
   },
   {
-    "text": "i'd like to rename them to v2.pdf",
-    "intent": "RENAME"
-  },
-  {
-    "text": "i'd like to rename C:\\Temp\\log.txt to v2.pdf",
-    "intent": "RENAME"
-  },
-  {
-    "text": "i'd like to rename that file to v2.pdf",
-    "intent": "RENAME"
-  },
-  {
-    "text": "i'd like to rename all documents to v2.pdf",
-    "intent": "RENAME"
-  },
-  {
-    "text": "i'd like to rename it to backup_copy.xlsx",
+    "text": "rename the file scan_01.jpg to v2.pdf",
     "intent": "RENAME"
   },
   {
@@ -480,31 +464,47 @@
     "intent": "RENAME"
   },
   {
-    "text": "please add 'todo: gym' to draft.txt",
+    "text": "i want to rename \"Final Draft.docx\" as report_final.docx",
+    "intent": "RENAME"
+  },
+  {
+    "text": "i'd like to rename C:\\Temp\\log.txt to report_final.docx",
+    "intent": "RENAME"
+  },
+  {
+    "text": "i'd like to rename the oldest song to backup_copy.xlsx",
+    "intent": "RENAME"
+  },
+  {
+    "text": "can you rename \"Final Draft.docx\" to v2.pdf",
+    "intent": "RENAME"
+  },
+  {
+    "text": "please add \"pay the rent\" to journal.txt",
     "intent": "EDIT_TEXT_FILE"
   },
   {
-    "text": "in journal.txt please write \"pay the rent\"",
+    "text": "in memo.txt please write \"pay the rent\"",
     "intent": "EDIT_TEXT_FILE"
   },
   {
-    "text": "append the note \"call mom tonight\" to memo.txt",
+    "text": "append the note \"pay the rent\" to journal.txt",
     "intent": "EDIT_TEXT_FILE"
   },
   {
-    "text": "in draft.txt insert \"call mom tonight\"",
+    "text": "in journal.txt insert \"pay the rent\"",
     "intent": "EDIT_TEXT_FILE"
   },
   {
-    "text": "write down 'todo: gym' in memo.txt",
+    "text": "write down 'good night' in memo.txt",
     "intent": "EDIT_TEXT_FILE"
   },
   {
-    "text": "can you add 'good night' to memo.txt",
+    "text": "can you add \"pay the rent\" to journal.txt",
     "intent": "EDIT_TEXT_FILE"
   },
   {
-    "text": "replace 'red' by \"v2\" in journal.txt",
+    "text": "replace 'red' by \"v2\" in memo.txt",
     "intent": "EDIT_TEXT_FILE"
   },
   {
@@ -512,7 +512,7 @@
     "intent": "EDIT_TEXT_FILE"
   },
   {
-    "text": "duplicate scan_01.jpg into Travel",
+    "text": "duplicate readme.md into Work",
     "intent": "UNSUPPORTED"
   },
   {
@@ -528,11 +528,11 @@
     "intent": "UNSUPPORTED"
   },
   {
-    "text": "zip documents into an archive",
+    "text": "zip PDF files into an archive",
     "intent": "UNSUPPORTED"
   },
   {
-    "text": "read \"Final Draft.docx\" aloud",
+    "text": "read contract.pdf aloud",
     "intent": "UNSUPPORTED"
   },
   {
@@ -544,19 +544,19 @@
     "intent": "UNSUPPORTED"
   },
   {
-    "text": "search the web for cricket scores",
+    "text": "search the web for hotel deals",
     "intent": "UNSUPPORTED"
   },
   {
-    "text": "google news",
+    "text": "google hotel deals",
     "intent": "UNSUPPORTED"
   },
   {
-    "text": "delete line 365 of journal.txt",
+    "text": "delete line 60 of draft.txt",
     "intent": "UNSUPPORTED"
   },
   {
-    "text": "duplicate contract.pdf into Music",
+    "text": "clone Sales_Q3.xlsx into Music",
     "intent": "UNSUPPORTED"
   }
 ]

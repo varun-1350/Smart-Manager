@@ -55,7 +55,13 @@ class ExecutionReport:
         lines = [f"Result: {self.status.value}" + (" (partly done)" if self.partial else "")]
         for r in self.results:
             if "count" in r.output:
-                lines.append(f"  {r.task_id}: found {r.output['count']} item(s) in {r.output['scope']}")
+                o = r.output
+                early = " (stopped early: too many matches)" if o.get("truncated") else ""
+                lines.append(f"  {r.task_id}: found {o['count']} item(s) in {o['scope']}{early}")
+                sample = o.get("sample", [])
+                lines += [f"      {s}" for s in sample]
+                if o["count"] > len(sample):
+                    lines.append(f"      ... and {o['count'] - len(sample)} more")
         for o in self.outcomes:
             tail = "" if o.status == "done" else f": {o.message}"
             lines.append(f"  [{o.status}] {o.description}{tail}")

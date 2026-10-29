@@ -90,6 +90,7 @@ TRAIN_TEMPLATES = {
         "open {t}", "please open {t}", "launch {t}", "open the {sort} {type}",
         "can you open {t}", "open the folder {folder}", "start {file}", "open {path}",
         "open the file {file}", "open it", "open {dirpath}",
+        "bring up {t}", "load {file}", "view {file}",
     ],
     "CREATE_FOLDER": [
         "create a folder named {name}", "make a new folder called {name}",
@@ -111,7 +112,9 @@ TRAIN_TEMPLATES = {
         "transfer {t} to {folder}", "relocate {file} to {folder}",
         "shift {t} into the {folder} folder", "move the {sort} {type} to {folder}",
         "move them to {folder}", "move to {folder}", "move {file}", "move",
-        "move {t} to {dirpath}",
+        "move {t} to {dirpath}","put {file} in {folder}", "put {file} into {folder}", "place {file} in {folder}",
+        "drop {file} into {folder}", "stash {t} in {folder}", "send {file} to {folder}",
+        "put {t} in the {folder} folder", "put all {types} in {folder}",
     ],
     "DELETE": [
         "delete {t}", "remove {file}", "send {t} to the recycle bin",
@@ -119,7 +122,8 @@ TRAIN_TEMPLATES = {
         "delete the {sort} {type}", "get rid of {file}", "erase {t}",
         "please delete {file}", "delete the rest", "delete",
         "delete {types} older than {n} days", "delete old files",
-        "delete all {types} in {folder}",
+        "delete all {types} in {folder}","discard {t}", "throw out {t}", "put {t} in the trash", "bin {t}",
+        "toss {file} in the trash", "dispose {file}",
     ],
     "COPY_TO_CLIPBOARD": [
         "copy {t} to the clipboard", "copy {file} to clipboard",
@@ -141,6 +145,8 @@ TRAIN_TEMPLATES = {
         "change the name of {file} to {new}", "rename {t} to {new}",
         "rename the {sort} {type} to {new}", "rename {file}", "rename it to {new}",
         "rename", "please rename {file} to {new}", "rename {path} to {new}",
+        "retitle {file} to {new}", "rename {t} as {new}",
+        "i want {file} renamed to {new}", "rename {file} to {new} please",
     ],
     "EDIT_TEXT_FILE": [
         "in {txtfile} add {text}", "add {text} to {txtfile}", "append {text} to {txtfile}",
@@ -154,6 +160,12 @@ TRAIN_TEMPLATES = {
         "substitute {old} with {newtext} in {txtfile}",
         "edit {txtfile}", "add {text} to it", "append {text} to the file",
         "write {text} in it", "add {text}",
+        "write {text} to {txtfile}", "put {text} in {txtfile}", "type {text} into {txtfile}",
+        "in {txtfile} put {text}", "add the line {text} to {txtfile}",
+        "in {txtfile} insert the line {text}", "append {text} to {txtfile} please",
+        "add {text} to the end of the file {txtfile}", "write the line {text} in {txtfile}",
+        "in the file {txtfile} add {text}", "insert {text} at the end of {txtfile}",
+        "replace {old} with {newtext}",
     ],
     "UNSUPPORTED": [
         "copy {file} to {folder}", "copy all {types} to {folder}",
@@ -169,6 +181,9 @@ TRAIN_TEMPLATES = {
         "what is in {file}", "delete the last line of {txtfile}",
         "remove the first line from {txtfile}", "delete line {n} of {txtfile}",
         "clear the contents of {txtfile}",
+        "make a copy of {file}", "back up {file} to {folder}", "read {file}",
+        "summarize {file}", "convert {file} to pdf", "share {file} with {person}",
+        "encrypt {file}", "what does {file} say", "email {types} to {person}",
     ],
 }
 
@@ -201,12 +216,12 @@ EVAL_TEMPLATES = {
     "MOVE": [
         "can you move {t} to {folder}", "i want to move {t} into {folder}",
         "relocate all {types} into {folder}", "move {t} over to the {folder} folder",
-        "transfer {file} to {dirpath}",
+        "transfer {file} to {dirpath}","stick {file} in {folder}",
     ],
     "DELETE": [
         "could you delete {t}", "throw away {file}", "i want to delete {t}",
         "put {file} in the recycle bin", "remove all {types} older than {n} days",
-        "dispose of {file}",
+        "dispose of {file}","toss {file} in the bin",
     ],
     "COPY_TO_CLIPBOARD": [
         "please copy {file} to the clipboard", "can you copy {t} to clipboard",
@@ -234,7 +249,8 @@ EVAL_TEMPLATES = {
         "search the web for {topic}", "google {topic}", "undo the last change",
         "what is in {file}", "delete the last line of {txtfile}",
         "remove the first line from {txtfile}", "delete line {n} of {txtfile}",
-        "clear the contents of {txtfile}",
+        "clear the contents of {txtfile}","clone {file} into {folder}",
+        
     ],
 }
 

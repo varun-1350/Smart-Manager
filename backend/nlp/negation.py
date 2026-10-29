@@ -18,6 +18,11 @@ VERB_TO_INTENTS: dict[str, frozenset[str]] = {
     "add": frozenset({"EDIT_TEXT_FILE"}), "append": frozenset({"EDIT_TEXT_FILE"}),
     "write": frozenset({"EDIT_TEXT_FILE"}), "insert": frozenset({"EDIT_TEXT_FILE"}),
     "edit": frozenset({"EDIT_TEXT_FILE"}), "replace": frozenset({"EDIT_TEXT_FILE"}),
+    "put": frozenset({"MOVE", "EDIT_TEXT_FILE"}), "place": frozenset({"MOVE"}),
+    "drop": frozenset({"MOVE"}), "stash": frozenset({"MOVE"}),
+    "stick": frozenset({"MOVE"}), "shift": frozenset({"MOVE"}),
+    "discard": frozenset({"DELETE"}), "dispose": frozenset({"DELETE"}),
+    "throw": frozenset({"DELETE"}), "get rid": frozenset({"DELETE"}),
 }
 
 _VERBS = "|".join(VERB_TO_INTENTS)

@@ -1,5 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field
-
+from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
 class _Body(BaseModel):
     model_config = ConfigDict(extra="forbid")        # unknown fields are errors, not ignored
@@ -28,3 +27,11 @@ class RunIn(_Body):
 
 class RunUndoIn(RunIn):
     confirm: bool
+
+class ClearIn(_Body):
+    confirm: bool
+
+
+class SettingIn(_Body):
+    key: str = Field(min_length=1, max_length=64)
+    value: StrictBool           # a real true/false, never "yes" or 1

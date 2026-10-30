@@ -29,7 +29,8 @@ TRIGGERS: dict[str, re.Pattern] = {
     "RENAME": _words("renam", "retitl", r"change\s+the\s+name", r"call\s+it", r"name\s+it"),
     "EDIT_TEXT_FILE": _words("add", "append", "writ", "insert", "replac", "substitut",
                              "edit", r"type\b", "put"),
-    "CREATE_FOLDER": _words("creat", "mak", r"new\b", "generat", "start", "add", "build"),
+    "CREATE_FOLDER": _words("creat", "mak", r"new\b", "generat", "start", "add", "build",
+                            "folder", "director"),
     "CREATE_TEXT_FILE": _words("creat", "mak", r"new\b", "generat", "start", "add", "build"),
 }
 TRIGGER_HINT = {"MOVE": "move", "DELETE": "delete", "RENAME": "rename",

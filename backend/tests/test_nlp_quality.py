@@ -82,3 +82,12 @@ def test_negated_new_verbs():
     assert "MOVE" in negated_intents("Don't put a.pdf in Archive")
     assert negated_intents("don't throw away a.pdf") == {"DELETE"}
     assert negated_intents("don't get rid of a.pdf") == {"DELETE"}
+
+def test_documents_is_a_file_type_but_not_when_it_is_a_folder():
+    assert extract_entities("move all documents to Archive").file_types == ["document"]
+    assert extract_entities("list files in Documents").file_types == []
+
+
+def test_a_folder_request_without_the_word_create():
+    assert has_trigger("CREATE_FOLDER", "i want a folder named school")
+    assert not has_trigger("CREATE_FOLDER", "open the newest")

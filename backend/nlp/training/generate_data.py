@@ -257,8 +257,21 @@ EVAL_TEMPLATES = {
 _SLOT = re.compile(r"\{(\w+)\}")
 
 
-def _target(rng: random.Random, pool: dict) -> str:
-    kind = rng.choice(["file", "file", "path", "typed", "all", "ref"])
+PREFIXES = ["can you ", "could you ", "please ", "i want to ", "i'd like to ", "would you "]
+_NO_PREFIX_START = {"in", "the", "what", "what's", "where", "who", "how", "i", "hello",
+                    "new", "please", "can", "could", "clipboard"}
+
+
+def _can_prefix(template: str) -> bool:
+    first = template.split(" ", 1)[0].lower()
+    return not first.startswith("{") and first not in _NO_PREFIX_START
+
+
+def _target(rng: random.Random, pool: dict, standalone: bool = False) -> str:
+    # standalone = a request with no earlier step, so "it"/"the rest"/"the largest" can't be used
+    kinds = (["file", "file", "path", "all"] if standalone
+             else ["file", "file", "path", "typed", "all", "ref"])
+    kind = rng.choice(kinds)
     if kind == "file":
         return rng.choice(pool["file"])
     if kind == "path":
@@ -270,19 +283,23 @@ def _target(rng: random.Random, pool: dict) -> str:
     return rng.choice(["it", "them", "the rest", "that file"])
 
 
-def fill(template: str, rng: random.Random, pool: dict) -> str:
+def fill(template: str, rng: random.Random, pool: dict, *, augment: bool = False,
+         standalone: bool = False) -> str:
     def pick(m: re.Match) -> str:
         key = m.group(1)
-        return _target(rng, pool) if key == "t" else rng.choice(pool[key])
-    return _SLOT.sub(pick, template)
-
+        return _target(rng, pool, standalone) if key == "t" else rng.choice(pool[key])
+    text = _SLOT.sub(pick, template)
+    if augment and _can_prefix(template) and rng.random() < 0.3:
+        text = rng.choice(PREFIXES) + text          # real people say "can you ..."
+    return text
 
 def _key(text: str) -> str:
     """What the classifier actually sees (masked, lowercased)."""
     return " ".join(mask_entities(text).casefold().split())
 
 
-def build_split(templates, pool, per_intent, rng, blocked=frozenset()):
+def build_split(templates, pool, per_intent, rng, blocked=frozenset(), *,
+                augment=False, standalone=False):
     """Return ({intent: [texts]}, conflicts). Duplicates (after masking) are dropped.
     A sentence that lands under two different intents is removed from BOTH."""
     data: dict[str, list[str]] = {label: [] for label in LABELS}
@@ -294,7 +311,8 @@ def build_split(templates, pool, per_intent, rng, blocked=frozenset()):
         tpls = templates[intent]
         tries = 0
         while len(data[intent]) < per_intent and tries < per_intent * 40:
-            text = fill(tpls[tries % len(tpls)], rng, pool)   # round-robin templates
+            text = fill(tpls[tries % len(tpls)], rng, pool,
+                        augment=augment, standalone=standalone)   # round-robin templates
             tries += 1
             key = _key(text)
             if key in blocked or key in banned:
@@ -330,7 +348,8 @@ def main() -> None:
     args = ap.parse_args()
     rng = random.Random(args.seed)
 
-    train, c1 = build_split(TRAIN_TEMPLATES, POOLS["train"], args.train_per_intent, rng)
+    train, c1 = build_split(TRAIN_TEMPLATES, POOLS["train"], args.train_per_intent, rng,
+                            augment=True)
 
     manual_train = _load_json("manual_intents.json") or {}
     for label, texts in manual_train.items():
@@ -340,7 +359,7 @@ def main() -> None:
 
     train_keys = {_key(t) for texts in train.values() for t in texts}
     evals, c2 = build_split(EVAL_TEMPLATES, POOLS["eval"], args.eval_per_intent, rng,
-                            blocked=train_keys)
+                            blocked=train_keys, standalone=True)
 
     eval_rows = [{"text": t, "intent": label} for label, texts in evals.items() for t in texts]
     for row in _load_json("manual_eval.json") or []:

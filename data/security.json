@@ -1,0 +1,16 @@
+{
+  "include_default_folders": false,
+  "allowed_drives": ["D:\\"],
+  "allowed_roots": [
+    "C:\\Users\\varun\\Contacts",
+    "C:\\Users\\varun\\Documents",
+    "C:\\Users\\varun\\Downloads",
+    "C:\\Users\\varun\\Favorites",
+    "C:\\Users\\varun\\Links",
+    "C:\\Users\\varun\\Music",
+    "C:\\Users\\varun\\OneDrive",
+    "C:\\Users\\varun\\Searches",
+    "C:\\Users\\varun\\Videos"
+  ],
+  "default_scope": "C:\\Users\\varun\\Downloads"
+}

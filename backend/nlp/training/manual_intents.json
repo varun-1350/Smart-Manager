@@ -1,8 +1,12 @@
 {
   "SEARCH": [
-    "show me my pdfs",
-    "show me all my pdfs",
-    "show me my images",
-    "show all my spreadsheets"
+    "show me my pdfs", "show me all my pdfs", "show me my images", "show all my spreadsheets"
+  ],
+  "LIST": [
+    "whats in downloads", "what's in my documents", "whats in the Pictures folder",
+    "show me what's in desktop", "whats inside downloads", "what is in downloads"
+  ],
+  "OPEN": [
+    "pull up report.pdf", "pull up the newest pdf", "pull up notes.txt"
   ]
 }

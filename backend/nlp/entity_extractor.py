@@ -104,6 +104,7 @@ _FILE_TYPE_WORDS = {
     "picture": "image", "pictures": "image", "png": "image", "jpg": "image",
     "jpeg": "image",
     "doc": "document", "docs": "document", "docx": "document",
+    "document": "document", "documents": "document",
     "excel": "spreadsheet", "spreadsheet": "spreadsheet",
     "spreadsheets": "spreadsheet", "xlsx": "spreadsheet", "csv": "spreadsheet",
     "ppt": "presentation", "pptx": "presentation", "presentation": "presentation",

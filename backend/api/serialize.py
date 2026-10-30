@@ -8,6 +8,7 @@ from backend.execution.recovery import RecoveryReport
 from backend.execution.report import ExecutionReport
 from backend.execution.undo import UndoOutcome, describe_step
 from backend.services.assistant import Turn
+from backend.execution.prepare import Prepared
 
 
 def _dump(model) -> dict:
@@ -27,11 +28,23 @@ def report_to_dict(r: ExecutionReport) -> dict:
         "undo_available": bool(r.undo_steps()),
     }
 
+def preview_to_dict(p: Prepared) -> dict:
+    return {
+        "reads": [{"task_id": r.task_id, "action": r.action, "scope": r.scope,
+                   "count": r.count, "truncated": r.truncated, "sample": r.sample}
+                  for r in p.reads],
+        "operations": [{"task_id": o.task_id, "action": o.action, "description": o.describe(),
+                        "source": o.source, "destination": o.destination, "risk": o.risk,
+                        "warnings": list(o.warnings)} for o in p.operations],
+        "needs_approval": p.needs_approval,
+    }
+
 
 def turn_to_dict(t: Turn) -> dict:
     return {"turn_id": t.turn_id, "kind": t.kind, "message": t.message, "digest": t.digest,
-            "report": report_to_dict(t.report) if t.report else None}
-
+            "report": report_to_dict(t.report) if t.report else None,
+            "preview": (preview_to_dict(t.prepared)
+                        if t.prepared is not None and t.kind == "needs_approval" else None)}
 
 def undo_outcomes_to_dict(outcomes: list[UndoOutcome]) -> list[dict]:
     return [{"description": describe_step(o.step), "status": o.status, "message": o.message}

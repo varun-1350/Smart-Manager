@@ -10,7 +10,7 @@ from backend.planner.errors import PlanningError
 from backend.planner.validator import BASE_RISK
 from backend.schemas.plan import ExecutionPlan
 from backend.schemas.task import Task
-from backend.security.config import SecurityConfig, default_config, load_config
+from backend.security.config import SecurityConfig, build_config, default_config, load_config
 from backend.security.errors import SecurityError
 from backend.security.pathutil import check_absolute_text, check_plain_name
 from backend.security.paths import PathPolicy
@@ -287,3 +287,107 @@ def test_malformed_plan_is_rejected_before_any_path_check(env):
     bad = Task(task_id="t1", action="run_shell", parameters={})
     with pytest.raises(PlanningError):
         preflight(ExecutionPlan(plan_id="p", request_id="r", tasks=[bad]), env.policy)
+
+def fixed(_root):
+    return True
+
+
+def _cfg(tmp_path, **kw):
+    args = dict(home=tmp_path / "home", project_root=tmp_path / "proj", is_fixed_drive=fixed)
+    args.update(kw)
+    return build_config(**args)
+
+
+@pytest.mark.parametrize("bad", ["D", "D:", r"D:\Work", r"\\server\share", "", "relative",
+                                 "DD:\\", "/", None])
+def test_malformed_drives_are_refused(tmp_path, bad):
+    with pytest.raises(SecurityError):
+        _cfg(tmp_path, drives=[bad])
+
+
+def test_drive_letters_are_normalised(tmp_path):
+    cfg = _cfg(tmp_path, drives=["d:/"], include_default_folders=False)
+    assert cfg.allowed_roots == (Path("D:\\"),)
+
+
+def test_a_drive_that_is_not_fixed_is_refused(tmp_path):
+    with pytest.raises(SecurityError, match="fixed"):
+        _cfg(tmp_path, drives=["D:\\"], is_fixed_drive=lambda root: False)
+
+
+def test_drive_protected_names_are_added(tmp_path):
+    cfg = _cfg(tmp_path, drives=["D:\\"], include_default_folders=False)
+    for name in ("$RECYCLE.BIN", "System Volume Information", "Windows", "Program Files"):
+        assert Path("D:\\") / name in cfg.protected_paths
+
+
+def test_only_the_listed_folders_when_defaults_are_off(tmp_path):
+    cfg = _cfg(tmp_path, folders=[tmp_path / "Mine"], include_default_folders=False)
+    assert cfg.allowed_roots == (tmp_path / "Mine",) and cfg.default_scope == tmp_path / "Mine"
+
+
+def test_default_scope_rules(tmp_path):
+    mine = tmp_path / "Mine"
+    ok = _cfg(tmp_path, folders=[mine], include_default_folders=False, default_scope=mine / "sub")
+    assert ok.default_scope == mine / "sub"
+    for bad in (tmp_path / "Elsewhere", "relative", tmp_path / "proj"):
+        with pytest.raises(SecurityError):
+            _cfg(tmp_path, folders=[mine], include_default_folders=False, default_scope=bad)
+
+
+def test_downloads_is_the_default_start_when_allowed(tmp_path):
+    downloads = tmp_path / "home" / "Downloads"
+    cfg = _cfg(tmp_path, folders=[tmp_path / "Mine", downloads], include_default_folders=False)
+    assert cfg.default_scope == downloads
+
+
+@pytest.mark.skipif(os.name != "nt", reason="drive roots are a Windows thing")
+def test_whole_drive_policy_keeps_system_and_app_folders_off_limits(tmp_path):
+    base = tmp_path.resolve()
+    drive = Path(base.anchor)
+    cfg = build_config(home=base / "home", project_root=base / "proj", drives=[str(drive)],
+                       include_default_folders=False, is_fixed_drive=fixed)
+    policy = PathPolicy(cfg)
+    work = base / "work"
+    work.mkdir()
+    ok = work / "a.txt"
+    ok.write_text("x")
+    (base / "proj").mkdir()
+    (base / "proj" / "key.txt").write_text("x")
+    assert policy.check(ok, mutating=True, must_exist=True) == ok
+    for bad in (base / "proj" / "key.txt", drive / "$RECYCLE.BIN" / "x", drive / "Windows" / "x.dll"):
+        with pytest.raises(SecurityError):
+            policy.check(bad, mutating=False)
+    with pytest.raises(SecurityError):
+        policy.check(drive, mutating=True, must_exist=True)       # the drive itself can't be changed
+    policy.check(drive, mutating=False, must_exist=True)           # but it can be listed
+
+
+def test_load_config_with_drives_and_exact_folders(tmp_path):
+    f = tmp_path / "security.json"
+    f.write_text(json.dumps({"include_default_folders": False, "allowed_drives": ["D:\\"],
+                             "allowed_roots": [str(tmp_path / "Mine")],
+                             "default_scope": str(tmp_path / "Mine")}), encoding="utf-8")
+    cfg = load_config(f, home=tmp_path / "home", is_fixed_drive=fixed)
+    assert cfg.allowed_roots == (tmp_path / "Mine", Path("D:\\"))
+
+
+def test_load_config_tolerates_a_byte_order_mark(tmp_path):
+    f = tmp_path / "security.json"
+    f.write_bytes(b"\xef\xbb\xbf" + json.dumps({"allowed_roots": [str(tmp_path / "Mine")]}).encode())
+    assert tmp_path / "Mine" in load_config(f, home=tmp_path / "home").allowed_roots
+
+
+@pytest.mark.parametrize("content", [
+    '{"allowed_root": []}',                     # typo: unknown key
+    '{"allowed_roots": "D:\\\\Work"}',          # not a list
+    '{"include_default_folders": "no"}',        # not true/false
+    '{"allowed_drives": ["D"]}',
+    "[]",
+    '{"include_default_folders": false}',       # nothing allowed at all
+])
+def test_bad_config_files_are_refused(tmp_path, content):
+    f = tmp_path / "security.json"
+    f.write_text(content)
+    with pytest.raises(SecurityError):
+        load_config(f, home=tmp_path / "home", is_fixed_drive=fixed)

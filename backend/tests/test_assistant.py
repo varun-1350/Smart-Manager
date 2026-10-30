@@ -164,3 +164,30 @@ def test_interrupted_runs_are_reported_once(env):
     assert reports[0].unknown[0].state == "done" and len(reports[0].undo_steps) == 1
     a.dismiss_interrupted(reports[0].run_path)
     assert a.interrupted() == ([], [])
+
+def test_undo_survives_a_later_read_only_request(env):
+    a = make_assistant(env)
+    turn = a.handle(TEXT)
+    a.approve(turn.turn_id, turn.digest)
+    assert a.handle("Find PDFs in Downloads").kind == "executed"
+    assert len(a.undo_preview()) == 2
+
+def test_progress_is_visible_while_running_and_idle_after(env):
+    seen = []
+
+    def spying_move(src, dst, **kw):
+        seen.append(a.progress())
+        return files.move_path(src, dst, **kw)
+
+    a = Assistant(FakeClassifier(), env.policy, journal_dir=env.base / "journal",
+                  backup_dir=env.base / "bak", tools=Tools(move_path=spying_move),
+                  today=lambda: date(2026, 10, 28))
+    assert a.progress() == {"running": False, "tasks": []}
+    turn = a.handle("Find PDFs in Downloads, move them to Archive")
+    assert turn.kind == "needs_approval" and turn.prepared is not None
+    a.approve(turn.turn_id, turn.digest)
+    assert len(seen) == 3 and all(s["running"] for s in seen)
+    assert seen[0]["tasks"][0]["status"] == "success" and seen[0]["tasks"][1]["status"] == "running"
+    assert seen[0]["tasks"][1]["label"] == "Move (3 items)"
+    after = a.progress()
+    assert after["running"] is False and [t["status"] for t in after["tasks"]] == ["success", "success"]

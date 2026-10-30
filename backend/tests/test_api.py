@@ -14,6 +14,9 @@ from backend.security.config import SecurityConfig
 from backend.security.paths import PathPolicy
 from backend.services.assistant import Assistant
 from backend.tools.filesystem import files, system
+from backend.storage.db import Database
+from backend.storage.history import HistoryStore
+from backend.storage.settings import SettingsStore
 
 TOKEN = "t" * 32
 H = {"X-Session-Token": TOKEN}
@@ -173,3 +176,111 @@ def test_unknown_or_hostile_run_ids_are_404(env):
     for bad in ("nope.jsonl", r"..\..\secret.jsonl", str(env.base / "x.jsonl")):
         assert post(env, "interrupted/dismiss", {"run_id": bad}).status_code == 404
         assert post(env, "interrupted/undo", {"run_id": bad, "confirm": True}).status_code == 404
+
+
+from backend.security.errors import SecurityError
+from backend.serve import build_assistant
+
+
+def test_security_headers_are_set(env):
+    r = env.client.get("/api/undo", headers=H)
+    assert "default-src 'self'" in r.headers["content-security-policy"]
+    assert r.headers["x-content-type-options"] == "nosniff"
+    assert r.headers["cache-control"] == "no-store"
+
+
+def test_the_built_interface_is_served_but_the_api_stays_protected(env, tmp_path):
+    ui = tmp_path / "ui"
+    ui.mkdir()
+    (ui / "index.html").write_text("<h1>hello ui</h1>")
+    client = TestClient(create_app(env.assistant, TOKEN, ui_dir=ui), base_url="http://127.0.0.1")
+    assert "hello ui" in client.get("/").text
+    assert client.get("/api/undo").status_code == 401
+    assert client.get("/api/undo", headers=H).status_code == 200
+
+
+def test_starting_on_real_folders_needs_an_explicit_flag():
+    with pytest.raises(SecurityError):
+        build_assistant(None, False)
+
+@pytest.fixture
+def hist(env):
+    db = Database(env.base / "app.db")
+    settings = SettingsStore(db)
+    env.history = HistoryStore(db, settings)
+    env.assistant.history = env.history          # create_app picks up history + settings from here
+    env.client2 = TestClient(create_app(env.assistant, TOKEN), base_url="http://127.0.0.1")
+    return env
+
+
+def test_storage_endpoints_need_the_token(hist):
+    for path in ("/api/history", "/api/history/1", "/api/settings"):
+        assert hist.client2.get(path).status_code == 401
+    assert hist.client2.post("/api/history/clear", json={"confirm": True}).status_code == 401
+
+
+def test_history_over_http(hist):
+    r = hist.client2.post("/api/message", json={"text": "Find PDFs in Downloads"}, headers=H)
+    assert r.json()["kind"] == "executed"
+    listing = hist.client2.get("/api/history", headers=H).json()
+    item = listing["items"][0]
+    assert item["request"] == "Find PDFs in Downloads" and item["status"] == "completed"
+    assert item["changed"] is False and listing["next_before"] is None
+    full = hist.client2.get(f"/api/history/{item['id']}", headers=H).json()
+    assert "a.pdf" in full["summary"]
+    assert hist.client2.get("/api/history/999", headers=H).status_code == 404
+
+
+@pytest.mark.parametrize("path", ["/api/history/abc", "/api/history/0", "/api/history?limit=0",
+                                  "/api/history?limit=500", "/api/history?before_id=-1",
+                                  "/api/history?before_id=99999999999999999999"])
+def test_bad_history_parameters_are_rejected(hist, path):
+    assert hist.client2.get(path, headers=H).status_code == 422
+
+
+def test_clearing_history_needs_confirmation(hist):
+    hist.client2.post("/api/message", json={"text": "Find PDFs in Downloads"}, headers=H)
+    bad = hist.client2.post("/api/history/clear", json={"confirm": False}, headers=H)
+    assert bad.status_code == 400 and len(hist.client2.get("/api/history", headers=H).json()["items"]) == 1
+    ok = hist.client2.post("/api/history/clear", json={"confirm": True}, headers=H)
+    assert ok.json() == {"deleted": 1}
+    assert hist.client2.get("/api/history", headers=H).json()["items"] == []
+
+
+def test_settings_over_http(hist):
+    rows = hist.client2.get("/api/settings", headers=H).json()["settings"]
+    assert rows[0]["key"] == "history_enabled" and rows[0]["value"] is True
+    out = hist.client2.post("/api/settings", json={"key": "history_enabled", "value": False}, headers=H)
+    assert out.json()["settings"][0]["value"] is False
+    hist.client2.post("/api/message", json={"text": "Find PDFs in Downloads"}, headers=H)
+    assert hist.client2.get("/api/history", headers=H).json()["items"] == []
+    assert hist.client2.post("/api/settings", json={"key": "nope", "value": True}, headers=H).status_code == 404
+    for bad in ("yes", 1):
+        assert hist.client2.post("/api/settings", json={"key": "history_enabled", "value": bad},
+                                 headers=H).status_code == 422
+
+
+def test_storage_endpoints_report_unavailable_when_not_configured(env):
+    assert env.client.get("/api/history", headers=H).status_code == 503
+    assert env.client.get("/api/settings", headers=H).status_code == 503
+
+def test_the_approval_preview_is_structured(env):
+    turn = post(env, "message", {"text": TEXT}).json()
+    preview = turn["preview"]
+    assert preview["reads"][0]["count"] == 3 and preview["needs_approval"] is True
+    ops = preview["operations"]
+    assert [o["action"] for o in ops] == ["open_file", "move_file", "move_file"]
+    assert [o["risk"] for o in ops] == ["medium", "high", "high"]
+    assert ops[1]["source"].endswith("a.pdf") and ops[1]["destination"].endswith("a.pdf")
+    done = post(env, "approve", {"turn_id": turn["turn_id"], "digest": turn["digest"]}).json()
+    assert done["preview"] is None
+
+
+def test_progress_endpoint(env):
+    assert env.client.get("/api/progress").status_code == 401
+    assert env.client.get("/api/progress", headers=H).json() == {"running": False, "tasks": []}
+    env.app.state.gate.acquire()
+    try:                                        # stays reachable while a request is running
+        assert env.client.get("/api/progress", headers=H).status_code == 200
+    finally:
+        env.app.state.gate.release()

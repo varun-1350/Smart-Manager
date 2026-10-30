@@ -122,6 +122,11 @@ def create_app(assistant, token: str, allowed_hosts=("127.0.0.1", "localhost"),
                 raise HTTPException(status_code=404, detail="Unknown run.") from None
         return {"outcomes": undo_outcomes_to_dict(outcomes)}
 
+    @router.get("/info")
+    def info():
+        config = getattr(getattr(assistant, "policy", None), "config", None)
+        return {"allowed_folders": [str(p) for p in getattr(config, "allowed_roots", ())]}
+
     def _need(obj, what):
         if obj is None:
             raise HTTPException(status_code=503, detail=f"{what} isn't available.")

@@ -69,8 +69,12 @@ def main() -> int:
         return 1
 
     print("Allowed folders:\n  " + "\n  ".join(str(p) for p in cfg.allowed_roots))
-    webview.create_window("Smart Manager", f"http://127.0.0.1:{port}/", js_api=JsApi(token),
-                          width=1000, height=760, min_size=(700, 500))
+    url = f"http://127.0.0.1:{port}/"
+    options = dict(js_api=JsApi(token), width=1000, height=760, min_size=(700, 500))
+    try:
+        webview.create_window("Smart Manager", url, text_select=True, **options)
+    except TypeError:        # an older pywebview without this option
+        webview.create_window("Smart Manager", url, **options)
     webview.start()
     server.should_exit = True
     thread.join(timeout=5)

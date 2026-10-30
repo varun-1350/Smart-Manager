@@ -1,8 +1,30 @@
+import { useState } from "react";
+import { copyText } from "./clipboard.js";
+
 // Everything here renders server text as TEXT. File names are untrusted input, so there is
 // no dangerouslySetInnerHTML anywhere in this app.
-import { useState } from "react";
+
+export function CopyButton({ text, label = "Copy" }) {
+  const [state, setState] = useState("idle");
+  const click = async () => {
+    const ok = await copyText(text);
+    setState(ok ? "done" : "failed");
+    setTimeout(() => setState("idle"), 1800);
+  };
+  return (
+    <button type="button" className="small" onClick={click}>
+      {state === "done" ? "Copied" : state === "failed" ? "Select it and press Ctrl+C" : label}
+    </button>
+  );
+}
+
 export function Pre({ text }) {
-  return <pre className="pre">{text}</pre>;
+  return (
+    <div className="prewrap">
+      <pre className="pre">{text}</pre>
+      <CopyButton text={text} />
+    </div>
+  );
 }
 
 const RISK_LABEL = { low: "Low", medium: "Medium", high: "High", destructive: "Delete" };
@@ -58,6 +80,7 @@ export function ApprovalCard({ item, busy, onApprove, onReject }) {
           Deleted items go to the Recycle Bin, so you can restore them there.
         </div>
       )}
+      {preview && <CopyButton text={turn.message} label="Copy details" />}
       {state === "waiting" && (
         <div className="row">
           <button className="primary" disabled={busy} onClick={() => onApprove(item)}>
@@ -90,6 +113,7 @@ export function ProgressCard({ progress }) {
     </div>
   );
 }
+
 export function ResultCard({ turn }) {
   const r = turn.report;
   const cls = r.succeeded ? "ok" : r.status === "cancelled" ? "warn" : "bad";

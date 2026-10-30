@@ -109,6 +109,7 @@ export function HistoryPanel({ onReuse, onClose }) {
 
 export function SettingsPanel({ onClose }) {
   const [settings, setSettings] = useState([]);
+  const [folders, setFolders] = useState([]);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -116,6 +117,10 @@ export function SettingsPanel({ onClose }) {
       .getSettings()
       .then((d) => setSettings(d.settings))
       .catch((e) => setError(e.message));
+    api
+      .getInfo()
+      .then((d) => setFolders(d.allowed_folders))
+      .catch(() => {});
   }, []);
 
   const toggle = async (s) => {
@@ -143,6 +148,17 @@ export function SettingsPanel({ onClose }) {
           <div className="muted">{s.description}</div>
         </div>
       ))}
+      <div className="setting">
+        <strong>Folders I can use</strong>
+        <ul>
+          {folders.map((f) => (
+            <li key={f}>{f}</li>
+          ))}
+        </ul>
+        <div className="muted">
+          Everything else is off limits. To change this, edit data/security.json and restart.
+        </div>
+      </div>
       <div className="setting">
         <strong>Optional language model</strong>
         <div className="muted">

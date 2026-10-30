@@ -284,3 +284,8 @@ def test_progress_endpoint(env):
         assert env.client.get("/api/progress", headers=H).status_code == 200
     finally:
         env.app.state.gate.release()
+
+def test_info_lists_the_allowed_folders(env):
+    assert env.client.get("/api/info").status_code == 401
+    data = env.client.get("/api/info", headers=H).json()
+    assert data["allowed_folders"] == [str(env.dl), str(env.docs), str(env.work)]

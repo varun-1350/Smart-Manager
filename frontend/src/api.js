@@ -69,3 +69,4 @@ export const clearHistory = () => call("/history/clear", "POST", { confirm: true
 export const getSettings = () => call("/settings");
 export const setSetting = (key, value) => call("/settings", "POST", { key, value });
 export const getProgress = () => call("/progress");
+export const getInfo = () => call("/info");

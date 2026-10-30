@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as api from "./api.js";
-import { HistoryPanel, SettingsPanel } from "./panels.jsx";
+import { copyText } from "./clipboard.js";
 import {
   ApprovalCard,
   ProgressCard,
@@ -9,9 +9,14 @@ import {
   UndoDialog,
   UndoResult,
 } from "./components.jsx";
+import { HistoryPanel, SettingsPanel } from "./panels.jsx";
+import { buildTranscript } from "./transcript.js";
 
 let nextId = 1;
 const newId = () => nextId++;
+
+const EXAMPLES = ["list files", "find PDFs", "create a folder named Test", "copy the path of notes.txt"];
+const MAX_RECALL = 50;
 
 export default function App() {
   const [phase, setPhase] = useState("starting"); // starting | needs-token | ready
@@ -23,9 +28,12 @@ export default function App() {
   const [dialog, setDialog] = useState(null);
   const [panel, setPanel] = useState(null); // null | "history" | "settings"
   const [progress, setProgress] = useState(null);
+  const [chatCopy, setChatCopy] = useState("");
   const [recovery, setRecovery] = useState({ reports: [], errors: [] });
   const endRef = useRef(null);
+  const inputRef = useRef(null);
   const startedRef = useRef(false);
+  const recallRef = useRef({ list: [], pos: -1 });
 
   const add = useCallback(
     (item) => setItems((prev) => [...prev, { id: newId(), ...item }]),
@@ -103,7 +111,12 @@ export default function App() {
 
   useEffect(() => {
     endRef.current?.scrollIntoView?.({ behavior: "smooth" });
-  }, [items, dialog]);
+  }, [items, dialog, progress]);
+
+  // Put the cursor back in the box whenever a request finishes.
+  useEffect(() => {
+    if (phase === "ready" && !busy && !panel) inputRef.current?.focus?.();
+  }, [phase, busy, panel]);
 
   // While a request runs, ask the server what it is doing. This endpoint is never blocked.
   useEffect(() => {
@@ -140,11 +153,36 @@ export default function App() {
     const value = text.trim();
     if (!value || busy) return;
     setText("");
+    const recall = recallRef.current;
+    if (recall.list[recall.list.length - 1] !== value) {
+      recall.list.push(value);
+      if (recall.list.length > MAX_RECALL) recall.list.shift();
+    }
+    recall.pos = -1;
     add({ role: "user", text: value });
     const turn = await run(() => api.sendMessage(value));
     if (turn) {
       showTurn(turn);
       if (turn.kind === "executed") await refreshUndo();
+    }
+  };
+
+  // Up/Down walk through earlier requests, like a terminal.
+  const onKeyDown = (e) => {
+    const recall = recallRef.current;
+    if (e.key === "ArrowUp" && recall.list.length) {
+      e.preventDefault();
+      recall.pos = recall.pos < 0 ? recall.list.length - 1 : Math.max(0, recall.pos - 1);
+      setText(recall.list[recall.pos]);
+    } else if (e.key === "ArrowDown" && recall.pos >= 0) {
+      e.preventDefault();
+      recall.pos += 1;
+      if (recall.pos >= recall.list.length) {
+        recall.pos = -1;
+        setText("");
+      } else {
+        setText(recall.list[recall.pos]);
+      }
     }
   };
 
@@ -191,6 +229,12 @@ export default function App() {
     await loadRecovery();
   };
 
+  const copyChat = async () => {
+    const ok = await copyText(buildTranscript(items));
+    setChatCopy(ok ? "Copied" : "Couldn't copy");
+    setTimeout(() => setChatCopy(""), 1800);
+  };
+
   const connect = (e) => {
     e.preventDefault();
     if (!tokenInput.trim()) return;
@@ -226,6 +270,10 @@ export default function App() {
     );
   }
 
+  const waitingForYou = items.some(
+    (i) => i.kind === "approval" && (i.state === "waiting" || i.state === "working")
+  );
+
   const renderItem = (item) => {
     if (item.role === "user") {
       return (
@@ -254,6 +302,16 @@ export default function App() {
         <h1>Smart Manager</h1>
         <span className="muted">Local and offline</span>
         <span className="spacer" />
+        <button onClick={copyChat} disabled={items.length === 0}>
+          {chatCopy || "Copy chat"}
+        </button>
+        <button
+          onClick={() => setItems([])}
+          disabled={busy || waitingForYou || items.length === 0}
+          title="Clears this screen only. History and undo are not affected."
+        >
+          New chat
+        </button>
         <button onClick={() => setPanel(panel === "history" ? null : "history")}>History</button>
         <button onClick={() => setPanel(panel === "settings" ? null : "settings")}>Settings</button>
       </header>
@@ -286,9 +344,25 @@ export default function App() {
 
       <section className={panel ? "chat hidden" : "chat"} aria-live="polite">
         {items.length === 0 && (
-          <p className="muted hint">
-            Try: find PDFs in Downloads, open the largest, and move the rest to Archive
-          </p>
+          <div className="hint">
+            <p className="muted">
+              Try: find PDFs in Downloads, open the largest, and move the rest to Archive
+            </p>
+            <div className="chips">
+              {EXAMPLES.map((example) => (
+                <button
+                  key={example}
+                  className="chip"
+                  onClick={() => {
+                    setText(example);
+                    inputRef.current?.focus?.();
+                  }}
+                >
+                  {example}
+                </button>
+              ))}
+            </div>
+          </div>
         )}
         {items.map(renderItem)}
         {dialog && (
@@ -306,8 +380,10 @@ export default function App() {
 
       <form className={panel ? "composer hidden" : "composer"} onSubmit={submit}>
         <input
+          ref={inputRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
+          onKeyDown={onKeyDown}
           placeholder="Type a request…"
           maxLength={1000}
           disabled={busy}
